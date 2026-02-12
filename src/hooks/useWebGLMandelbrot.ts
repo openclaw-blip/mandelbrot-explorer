@@ -430,12 +430,16 @@ export function useWebGLMandelbrot(
     const viewWidth = 4 / view.zoom;
     const viewHeight = viewWidth / aspectRatio;
 
-    // Compute reference orbit (recompute if view changed significantly)
+    // Compute reference orbit (recompute if view changed or ref point is out of view)
     const lastRef = lastRefPointRef.current;
-    const needNewRef = !lastRef || 
-      Math.abs(lastRef.centerX - view.centerX) > viewWidth * 0.01 || 
-      Math.abs(lastRef.centerY - view.centerY) > viewHeight * 0.01 ||
-      Math.abs(lastRef.zoom - view.zoom) > view.zoom * 0.1;
+    
+    // Check if old reference point is still within current view
+    const refInView = lastRef && 
+      Math.abs(lastRef.refX - view.centerX) < viewWidth * 0.4 &&
+      Math.abs(lastRef.refY - view.centerY) < viewHeight * 0.4;
+    
+    const needNewRef = !lastRef || !refInView ||
+      Math.abs(lastRef.zoom - view.zoom) > view.zoom * 0.5;
     
     let refOrbitLen = lastRef?.escapeIter ?? maxIterations;
     let refX = lastRef?.refX ?? view.centerX;
