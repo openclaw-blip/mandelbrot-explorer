@@ -29,6 +29,7 @@ const fragmentShaderSource = `#version 300 es
   out vec4 fragColor;
   
   uniform vec2 u_resolution;
+  uniform vec2 u_center;      // For fallback direct computation
   uniform vec2 u_refOffset;   // refPoint - center (computed in float64 on CPU)
   uniform vec2 u_viewScale;   // (viewWidth, viewHeight)
   uniform int u_maxIterations;
@@ -134,8 +135,10 @@ const fragmentShaderSource = `#version 300 es
     }
     
     // Phase 2: Direct computation if needed (when reference orbit ran out)
-    // Note: We use dc as approximation for c offset since we don't have absolute coords
     if (useDirectCompute && !escaped) {
+      // Use center + pixelOffset for c (may lose precision at deep zoom, but fallback is rare)
+      vec2 c = u_center + pixelOffset;
+      
       for (int i = iteration; i < 10000; i++) {
         if (i >= u_maxIterations) break;
         
@@ -145,12 +148,9 @@ const fragmentShaderSource = `#version 300 es
           break;
         }
         
-        // z = z² + c (using z + dc as approximation since we're continuing from perturbation)
         float zr2 = z.x * z.x;
         float zi2 = z.y * z.y;
-        float newZr = zr2 - zi2 + dc.x;
-        float newZi = 2.0 * z.x * z.y + dc.y;
-        z = vec2(newZr, newZi);
+        z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
         
         iteration = i + 1;
       }
@@ -325,6 +325,7 @@ export function useWebGLMandelbrot(
   const refOrbitTexRef = useRef<WebGLTexture | null>(null);
   const uniformsRef = useRef<{
     resolution: WebGLUniformLocation | null;
+    center: WebGLUniformLocation | null;
     refOffset: WebGLUniformLocation | null;
     viewScale: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
@@ -387,6 +388,7 @@ export function useWebGLMandelbrot(
 
     uniformsRef.current = {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
+      center: gl.getUniformLocation(program, 'u_center'),
       refOffset: gl.getUniformLocation(program, 'u_refOffset'),
       viewScale: gl.getUniformLocation(program, 'u_viewScale'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
@@ -424,6 +426,7 @@ export function useWebGLMandelbrot(
       const refOffsetY = bestRef.y - view.centerY;
       
       gl.uniform2f(uniformsRef.current!.resolution, canvas.width, canvas.height);
+      gl.uniform2f(uniformsRef.current!.center, view.centerX, view.centerY);
       gl.uniform2f(uniformsRef.current!.refOffset, refOffsetX, refOffsetY);
       gl.uniform2f(uniformsRef.current!.viewScale, viewWidth, viewHeight);
       gl.uniform1i(uniformsRef.current!.maxIterations, maxIterations);
@@ -493,6 +496,7 @@ export function useWebGLMandelbrot(
     const refOffsetY = refY - view.centerY;
     
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
+    gl.uniform2f(uniforms.center, view.centerX, view.centerY);
     gl.uniform2f(uniforms.refOffset, refOffsetX, refOffsetY);
     gl.uniform2f(uniforms.viewScale, viewWidth, viewHeight);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
