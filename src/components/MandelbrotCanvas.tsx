@@ -4,6 +4,7 @@ import { InfoOverlay } from './InfoOverlay';
 import { HelpOverlay } from './HelpOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
+import { Minimap } from './Minimap';
 import { ColorTheme, colorThemes, defaultTheme } from '../colorThemes';
 
 export function MandelbrotCanvas() {
@@ -125,6 +126,12 @@ export function MandelbrotCanvas() {
       >
         <canvas ref={canvasRef} className="mandelbrot-canvas" />
       </div>
+      <Minimap
+        centerX={viewState.centerX}
+        centerY={viewState.centerY}
+        zoom={viewState.zoom}
+        theme={theme}
+      />
       <InfoOverlay
         centerX={viewState.centerX}
         centerY={viewState.centerY}
