@@ -5,37 +5,27 @@ interface InfoOverlayProps {
 }
 
 export function InfoOverlay({ centerX, centerY, zoom }: InfoOverlayProps) {
-  const formatNumber = (n: number, precision: number = 12) => {
-    if (Math.abs(n) < 0.0001 || Math.abs(n) >= 10000) {
-      return n.toExponential(precision);
+  const formatNumber = (n: number) => {
+    if (Math.abs(n) < 0.0001 || Math.abs(n) >= 1000) {
+      return n.toExponential(6);
     }
-    return n.toFixed(precision);
+    return n.toFixed(8);
   };
 
   const formatZoom = (z: number) => {
-    if (z >= 1000000) {
-      return z.toExponential(2) + 'x';
-    }
-    if (z >= 1000) {
-      return (z / 1000).toFixed(1) + 'Kx';
-    }
-    return z.toFixed(1) + 'x';
+    if (z >= 1e9) return z.toExponential(1) + '×';
+    if (z >= 1e6) return (z / 1e6).toFixed(1) + 'M×';
+    if (z >= 1e3) return (z / 1e3).toFixed(1) + 'K×';
+    return z.toFixed(1) + '×';
   };
+
+  const sign = centerY >= 0 ? '+' : '';
 
   return (
     <div className="info-overlay">
-      <div className="info-row">
-        <span className="info-label">Real</span>
-        <span className="info-value real">{formatNumber(centerX)}</span>
-      </div>
-      <div className="info-row">
-        <span className="info-label">Imag</span>
-        <span className="info-value imag">{formatNumber(centerY)}i</span>
-      </div>
-      <div className="info-row">
-        <span className="info-label">Zoom</span>
-        <span className="info-value zoom">{formatZoom(zoom)}</span>
-      </div>
+      <span className="info-coord">{formatNumber(centerX)}</span>
+      <span className="info-coord">{sign}{formatNumber(centerY)}i</span>
+      <span className="info-zoom">{formatZoom(zoom)}</span>
     </div>
   );
 }

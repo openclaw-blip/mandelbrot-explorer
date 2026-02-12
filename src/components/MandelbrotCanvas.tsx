@@ -1,7 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useWebGLMandelbrot } from '../hooks/useWebGLMandelbrot';
 import { InfoOverlay } from './InfoOverlay';
-import { HelpOverlay } from './HelpOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
 import { Minimap } from './Minimap';
@@ -143,7 +142,6 @@ export function MandelbrotCanvas() {
         currentTheme={theme}
         onThemeChange={setTheme}
       />
-      <HelpOverlay />
       <LoadingIndicator visible={isComputing} />
     </>
   );

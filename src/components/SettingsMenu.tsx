@@ -9,9 +9,54 @@ interface SettingsMenuProps {
   onThemeChange: (theme: ColorTheme) => void;
 }
 
+function HelpModal({ onClose }: { onClose: () => void }) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="help-modal-backdrop" onClick={onClose}>
+      <div className="help-modal" onClick={e => e.stopPropagation()}>
+        <h2>Keyboard Shortcuts</h2>
+        <div className="help-row">
+          <span className="help-key">Click</span>
+          <span className="help-action">Zoom in</span>
+        </div>
+        <div className="help-row">
+          <span className="help-key">Shift + Click</span>
+          <span className="help-action">Zoom out</span>
+        </div>
+        <div className="help-row">
+          <span className="help-key">Right Click</span>
+          <span className="help-action">Zoom out</span>
+        </div>
+        <div className="help-row">
+          <span className="help-key">Scroll</span>
+          <span className="help-action">Zoom in/out</span>
+        </div>
+        <div className="help-row">
+          <span className="help-key">Drag</span>
+          <span className="help-action">Pan</span>
+        </div>
+        <div className="help-row">
+          <span className="help-key">R</span>
+          <span className="help-action">Reset view</span>
+        </div>
+        <button className="help-close" onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsMenu({ themes, currentTheme, onThemeChange }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -155,8 +200,24 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange }: SettingsMe
               ))}
             </div>
           )}
+          
+          <div className="settings-divider" />
+          
+          <button 
+            className="settings-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowHelp(true);
+              setIsOpen(false);
+            }}
+          >
+            <span className="settings-icon">❓</span>
+            <span className="settings-label">Help</span>
+          </button>
         </div>
       )}
+      
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
   );
 }
