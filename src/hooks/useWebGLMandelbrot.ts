@@ -688,6 +688,18 @@ export function useWebGLMandelbrot(
     updateUrl(newView);
   }, [render]);
 
+  const navigateTo = useCallback((newCenterX: number, newCenterY: number, newZoom: number) => {
+    const newView: ViewState = {
+      centerX: newCenterX,
+      centerY: newCenterY,
+      zoom: newZoom,
+    };
+    currentViewRef.current = newView;
+    setViewState(newView);
+    render(newView);
+    updateUrl(newView);
+  }, [render]);
+
   return {
     viewState,
     isComputing: false,
@@ -696,6 +708,7 @@ export function useWebGLMandelbrot(
     pan,
     reset,
     setCenter,
+    navigateTo,
     handleResize,
     startDrag,
     stopDrag,

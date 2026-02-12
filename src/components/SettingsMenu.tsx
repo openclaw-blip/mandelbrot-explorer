@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ColorTheme } from '../colorThemes';
+import { interestingLocations } from '../locations';
 
 type CopyState = 'idle' | 'success' | 'error';
 
@@ -8,6 +9,9 @@ interface SettingsMenuProps {
   currentTheme: ColorTheme;
   onThemeChange: (theme: ColorTheme) => void;
   onScreenshot: () => void;
+  onReset: () => void;
+  onFullscreen: () => void;
+  onNavigateTo: (x: number, y: number, zoom: number) => void;
 }
 
 function HelpModal({ onClose }: { onClose: () => void }) {
@@ -48,15 +52,20 @@ function HelpModal({ onClose }: { onClose: () => void }) {
           <span className="help-key">R</span>
           <span className="help-action">Reset view</span>
         </div>
+        <div className="help-row">
+          <span className="help-key">F</span>
+          <span className="help-action">Fullscreen</span>
+        </div>
         <button className="help-close" onClick={onClose}>Close</button>
       </div>
     </div>
   );
 }
 
-export function SettingsMenu({ themes, currentTheme, onThemeChange, onScreenshot }: SettingsMenuProps) {
+export function SettingsMenu({ themes, currentTheme, onThemeChange, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+  const [showLocations, setShowLocations] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const menuRef = useRef<HTMLDivElement>(null);
@@ -65,6 +74,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, onScreenshot
   useEffect(() => {
     if (!isOpen) {
       setShowThemes(false);
+      setShowLocations(false);
       return;
     }
     
@@ -178,13 +188,70 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, onScreenshot
             <span className="settings-label">Save image</span>
           </button>
           
+          <button 
+            className="settings-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFullscreen();
+              setIsOpen(false);
+            }}
+          >
+            <span className="settings-icon">⛶</span>
+            <span className="settings-label">Fullscreen</span>
+          </button>
+          
+          <button 
+            className="settings-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReset();
+              setIsOpen(false);
+            }}
+          >
+            <span className="settings-icon">↺</span>
+            <span className="settings-label">Reset view</span>
+          </button>
+          
           <div className="settings-divider" />
+          
+          <button 
+            className={`settings-item ${showLocations ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowLocations(!showLocations);
+              setShowThemes(false);
+            }}
+          >
+            <span className="settings-icon">📍</span>
+            <span className="settings-label">Locations</span>
+            <span className="settings-arrow">{showLocations ? '▼' : '▶'}</span>
+          </button>
+          
+          {showLocations && (
+            <div className="theme-list">
+              {interestingLocations.map(loc => (
+                <button
+                  key={loc.id}
+                  className="theme-item"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateTo(loc.x, loc.y, loc.zoom);
+                    setShowLocations(false);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="theme-name">{loc.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
           
           <button 
             className={`settings-item ${showThemes ? 'active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               setShowThemes(!showThemes);
+              setShowLocations(false);
             }}
           >
             <span className="settings-icon">🎨</span>

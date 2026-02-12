@@ -59,7 +59,7 @@ export function MandelbrotCanvas() {
     }, 'image/png');
   }, []);
 
-  const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
+  const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, navigateTo, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
     theme,
   });
@@ -84,12 +84,22 @@ export function MandelbrotCanvas() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'r' || e.key === 'R') {
         reset();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [reset]);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }, []);
 
   // Mouse handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -284,6 +294,9 @@ export function MandelbrotCanvas() {
         currentTheme={theme}
         onThemeChange={handleThemeChange}
         onScreenshot={handleScreenshot}
+        onReset={reset}
+        onFullscreen={toggleFullscreen}
+        onNavigateTo={navigateTo}
       />
       <LoadingIndicator visible={isComputing} />
     </>
