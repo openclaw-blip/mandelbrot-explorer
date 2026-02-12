@@ -339,6 +339,7 @@ export function useWebGLMandelbrot(
   const lastRefPointRef = useRef<{ centerX: number; centerY: number; refX: number; refY: number; escapeIter: number; zoom: number } | null>(null);
   const urlUpdateTimeoutRef = useRef<number>();
   const isAnimatingRef = useRef<boolean>(false);
+  const isDraggingRef = useRef<boolean>(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -467,9 +468,9 @@ export function useWebGLMandelbrot(
       Math.abs(lastRef.refX - view.centerX) < viewWidth * 0.4 &&
       Math.abs(lastRef.refY - view.centerY) < viewHeight * 0.4;
     
-    // Don't recompute during animation - wait for it to settle
-    const needNewRef = !isAnimatingRef.current && (!lastRef || !refInView ||
-      Math.abs(lastRef.zoom - view.zoom) > view.zoom * 0.5);
+    // Don't recompute during animation or dragging - wait for it to settle
+    const needNewRef = !isAnimatingRef.current && !isDraggingRef.current && 
+      (!lastRef || !refInView || Math.abs(lastRef.zoom - view.zoom) > view.zoom * 0.5);
     
     let refOrbitLen = lastRef?.escapeIter ?? maxIterations;
     let refX = lastRef?.refX ?? view.centerX;
@@ -621,6 +622,16 @@ export function useWebGLMandelbrot(
     render(currentViewRef.current);
   }, [canvasRef, render]);
 
+  const startDrag = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
+  const stopDrag = useCallback(() => {
+    isDraggingRef.current = false;
+    // Re-render with potentially new reference
+    render(currentViewRef.current);
+  }, [render]);
+
   return {
     viewState,
     isComputing: false,
@@ -628,6 +639,8 @@ export function useWebGLMandelbrot(
     pan,
     reset,
     handleResize,
+    startDrag,
+    stopDrag,
     render: () => render(currentViewRef.current),
   };
 }

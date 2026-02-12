@@ -10,8 +10,8 @@ export function MandelbrotCanvas() {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const { viewState, isComputing, zoomAt, pan, reset, handleResize } = useWebGLMandelbrot(canvasRef, {
-    maxIterations: 1000, // Can handle more iterations now!
+  const { viewState, isComputing, zoomAt, pan, reset, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
+    maxIterations: 1000,
   });
 
   // Handle resize
@@ -55,6 +55,7 @@ export function MandelbrotCanvas() {
       
       if (!isDragging && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
         setIsDragging(true);
+        startDrag();
       }
       
       if (isDragging) {
@@ -62,7 +63,7 @@ export function MandelbrotCanvas() {
         dragStartRef.current = { x: e.clientX, y: e.clientY };
       }
     }
-  }, [isDragging, pan]);
+  }, [isDragging, pan, startDrag]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (!isDragging && dragStartRef.current) {
@@ -71,14 +72,20 @@ export function MandelbrotCanvas() {
       zoomAt(e.clientX, e.clientY, zoomIn);
     }
     
+    if (isDragging) {
+      stopDrag();
+    }
     dragStartRef.current = null;
     setIsDragging(false);
-  }, [isDragging, zoomAt]);
+  }, [isDragging, zoomAt, stopDrag]);
 
   const handleMouseLeave = useCallback(() => {
+    if (isDragging) {
+      stopDrag();
+    }
     dragStartRef.current = null;
     setIsDragging(false);
-  }, []);
+  }, [isDragging, stopDrag]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
