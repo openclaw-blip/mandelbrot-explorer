@@ -30,7 +30,8 @@ const fragmentShaderSource = `
   uniform vec2 u_resolution;
   uniform vec2 u_centerHi;  // High bits of center
   uniform vec2 u_centerLo;  // Low bits of center
-  uniform float u_zoom;
+  uniform vec2 u_pixelDeltaHi; // High bits of per-pixel delta (x, y)
+  uniform vec2 u_pixelDeltaLo; // Low bits of per-pixel delta
   uniform int u_maxIterations;
   
   // Double-float operations for extended precision
@@ -117,17 +118,21 @@ const fragmentShaderSource = `
   }
   
   void main() {
-    float aspectRatio = u_resolution.x / u_resolution.y;
-    float viewWidth = 4.0 / u_zoom;
-    float viewHeight = viewWidth / aspectRatio;
+    // Pixel offset from center in pixels
+    float pixelOffsetX = (v_uv.x - 0.5) * u_resolution.x;
+    float pixelOffsetY = (v_uv.y - 0.5) * u_resolution.y;
     
-    // Pixel offset from center (in complex plane units)
-    float offsetX = (v_uv.x - 0.5) * viewWidth;
-    float offsetY = (v_uv.y - 0.5) * viewHeight;
+    // Convert to complex plane using double precision delta
+    vec2 deltaX = vec2(u_pixelDeltaHi.x, u_pixelDeltaLo.x);
+    vec2 deltaY = vec2(u_pixelDeltaHi.y, u_pixelDeltaLo.y);
     
-    // Add offset to center using double precision
-    vec2 cRe = ds_add(vec2(u_centerHi.x, u_centerLo.x), ds_set(offsetX));
-    vec2 cIm = ds_add(vec2(u_centerHi.y, u_centerLo.y), ds_set(offsetY));
+    // cRe = centerX + pixelOffsetX * deltaX
+    vec2 offsetRe = ds_mul(deltaX, ds_set(pixelOffsetX));
+    vec2 cRe = ds_add(vec2(u_centerHi.x, u_centerLo.x), offsetRe);
+    
+    // cIm = centerY + pixelOffsetY * deltaY  
+    vec2 offsetIm = ds_mul(deltaY, ds_set(pixelOffsetY));
+    vec2 cIm = ds_add(vec2(u_centerHi.y, u_centerLo.y), offsetIm);
     
     // Mandelbrot iteration with double precision
     vec2 zRe = vec2(0.0, 0.0);
@@ -230,7 +235,8 @@ export function useWebGLMandelbrot(
     resolution: WebGLUniformLocation | null;
     centerHi: WebGLUniformLocation | null;
     centerLo: WebGLUniformLocation | null;
-    zoom: WebGLUniformLocation | null;
+    pixelDeltaHi: WebGLUniformLocation | null;
+    pixelDeltaLo: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
   } | null>(null);
   
@@ -280,7 +286,8 @@ export function useWebGLMandelbrot(
       resolution: gl.getUniformLocation(program, 'u_resolution'),
       centerHi: gl.getUniformLocation(program, 'u_centerHi'),
       centerLo: gl.getUniformLocation(program, 'u_centerLo'),
-      zoom: gl.getUniformLocation(program, 'u_zoom'),
+      pixelDeltaHi: gl.getUniformLocation(program, 'u_pixelDeltaHi'),
+      pixelDeltaLo: gl.getUniformLocation(program, 'u_pixelDeltaLo'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
     };
 
@@ -309,12 +316,23 @@ export function useWebGLMandelbrot(
     // Split center coordinates into hi/lo parts for extended precision
     const [centerXHi, centerXLo] = splitDouble(view.centerX);
     const [centerYHi, centerYLo] = splitDouble(view.centerY);
+    
+    // Calculate per-pixel delta in complex plane (in JavaScript float64)
+    const aspectRatio = canvas.width / canvas.height;
+    const viewWidth = 4 / view.zoom;
+    const viewHeight = viewWidth / aspectRatio;
+    const pixelDeltaX = viewWidth / canvas.width;
+    const pixelDeltaY = viewHeight / canvas.height;
+    
+    const [pixelDeltaXHi, pixelDeltaXLo] = splitDouble(pixelDeltaX);
+    const [pixelDeltaYHi, pixelDeltaYLo] = splitDouble(pixelDeltaY);
 
     // Set uniforms
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
     gl.uniform2f(uniforms.centerHi, centerXHi, centerYHi);
     gl.uniform2f(uniforms.centerLo, centerXLo, centerYLo);
-    gl.uniform1f(uniforms.zoom, view.zoom);
+    gl.uniform2f(uniforms.pixelDeltaHi, pixelDeltaXHi, pixelDeltaYHi);
+    gl.uniform2f(uniforms.pixelDeltaLo, pixelDeltaXLo, pixelDeltaYLo);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
 
     // Draw
