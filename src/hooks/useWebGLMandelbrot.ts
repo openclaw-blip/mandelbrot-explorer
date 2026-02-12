@@ -21,72 +21,30 @@ const vertexShaderSource = `
   }
 `;
 
-// Fragment shader with emulated double precision for deep zooms
+// Fragment shader - simple single precision first to establish baseline
 const fragmentShaderSource = `
   precision highp float;
   
   varying vec2 v_uv;
   
   uniform vec2 u_resolution;
-  uniform vec2 u_centerHi;  // High bits of center
-  uniform vec2 u_centerLo;  // Low bits of center
-  uniform vec2 u_pixelDeltaHi; // High bits of per-pixel delta (x, y)
-  uniform vec2 u_pixelDeltaLo; // Low bits of per-pixel delta
+  uniform vec2 u_centerHi;
+  uniform vec2 u_centerLo;
+  uniform vec2 u_pixelDeltaHi;
+  uniform vec2 u_pixelDeltaLo;
   uniform int u_maxIterations;
-  
-  // Double-float operations for extended precision
-  // A double is represented as (hi, lo) where value = hi + lo
-  
-  // Split a float into high and low parts
-  vec2 ds_set(float a) {
-    return vec2(a, 0.0);
-  }
-  
-  // Add two double-singles
-  vec2 ds_add(vec2 a, vec2 b) {
-    float t1 = a.x + b.x;
-    float e = t1 - a.x;
-    float t2 = ((b.x - e) + (a.x - (t1 - e))) + a.y + b.y;
-    float hi = t1 + t2;
-    float lo = t2 - (hi - t1);
-    return vec2(hi, lo);
-  }
-  
-  // Multiply two double-singles (no fma in WebGL 1.0)
-  vec2 ds_mul(vec2 a, vec2 b) {
-    // Split floats for Dekker multiplication
-    float split = 4097.0; // 2^12 + 1
-    float cona = a.x * split;
-    float conb = b.x * split;
-    float a1 = cona - (cona - a.x);
-    float b1 = conb - (conb - b.x);
-    float a2 = a.x - a1;
-    float b2 = b.x - b1;
-    
-    float hi = a.x * b.x;
-    float lo = ((a1 * b1 - hi) + a1 * b2 + a2 * b1) + a2 * b2;
-    lo = lo + a.x * b.y + a.y * b.x;
-    
-    float s = hi + lo;
-    return vec2(s, lo - (s - hi));
-  }
-  
-  // Compare: returns true if a > b
-  bool ds_gt(vec2 a, float b) {
-    return a.x > b || (a.x == b && a.y > 0.0);
-  }
   
   // Cyberpunk color palette
   vec3 getColor(float t) {
     vec3 colors[8];
-    colors[0] = vec3(1.0, 0.0, 1.0);      // Hot pink
-    colors[1] = vec3(0.0, 1.0, 1.0);      // Cyan
-    colors[2] = vec3(0.616, 0.0, 1.0);    // Purple
-    colors[3] = vec3(0.0, 0.4, 1.0);      // Electric blue
-    colors[4] = vec3(1.0, 0.0, 0.5);      // Hot pink variant
-    colors[5] = vec3(0.0, 0.784, 1.0);    // Light cyan
-    colors[6] = vec3(0.784, 0.0, 1.0);    // Light purple
-    colors[7] = vec3(0.0, 0.588, 1.0);    // Sky blue
+    colors[0] = vec3(1.0, 0.0, 1.0);
+    colors[1] = vec3(0.0, 1.0, 1.0);
+    colors[2] = vec3(0.616, 0.0, 1.0);
+    colors[3] = vec3(0.0, 0.4, 1.0);
+    colors[4] = vec3(1.0, 0.0, 0.5);
+    colors[5] = vec3(0.0, 0.784, 1.0);
+    colors[6] = vec3(0.784, 0.0, 1.0);
+    colors[7] = vec3(0.0, 0.588, 1.0);
     
     float scaledT = t * 4.0;
     int idx = int(mod(scaledT, 8.0));
@@ -118,48 +76,26 @@ const fragmentShaderSource = `
   }
   
   void main() {
-    // Pixel offset from center in pixels
-    float pixelOffsetX = (v_uv.x - 0.5) * u_resolution.x;
-    float pixelOffsetY = (v_uv.y - 0.5) * u_resolution.y;
+    // Reconstruct double-precision coordinates from hi+lo parts
+    float cRe = u_centerHi.x + u_centerLo.x + (v_uv.x - 0.5) * u_resolution.x * (u_pixelDeltaHi.x + u_pixelDeltaLo.x);
+    float cIm = u_centerHi.y + u_centerLo.y + (v_uv.y - 0.5) * u_resolution.y * (u_pixelDeltaHi.y + u_pixelDeltaLo.y);
     
-    // Convert to complex plane using double precision delta
-    vec2 deltaX = vec2(u_pixelDeltaHi.x, u_pixelDeltaLo.x);
-    vec2 deltaY = vec2(u_pixelDeltaHi.y, u_pixelDeltaLo.y);
-    
-    // cRe = centerX + pixelOffsetX * deltaX
-    vec2 offsetRe = ds_mul(deltaX, ds_set(pixelOffsetX));
-    vec2 cRe = ds_add(vec2(u_centerHi.x, u_centerLo.x), offsetRe);
-    
-    // cIm = centerY + pixelOffsetY * deltaY  
-    vec2 offsetIm = ds_mul(deltaY, ds_set(pixelOffsetY));
-    vec2 cIm = ds_add(vec2(u_centerHi.y, u_centerLo.y), offsetIm);
-    
-    // Mandelbrot iteration with double precision
-    vec2 zRe = vec2(0.0, 0.0);
-    vec2 zIm = vec2(0.0, 0.0);
-    vec2 zRe2 = vec2(0.0, 0.0);
-    vec2 zIm2 = vec2(0.0, 0.0);
+    // Standard Mandelbrot iteration
+    float zr = 0.0;
+    float zi = 0.0;
     
     int iteration = 0;
     
     for (int i = 0; i < 10000; i++) {
       if (i >= u_maxIterations) break;
       
-      // Check escape: zRe2 + zIm2 > 4.0
-      vec2 mag2 = ds_add(zRe2, zIm2);
-      if (ds_gt(mag2, 4.0)) break;
+      float zr2 = zr * zr;
+      float zi2 = zi * zi;
       
-      // zIm = 2 * zRe * zIm + cIm
-      vec2 two = vec2(2.0, 0.0);
-      vec2 zReZIm = ds_mul(zRe, zIm);
-      zIm = ds_add(ds_mul(two, zReZIm), cIm);
+      if (zr2 + zi2 > 4.0) break;
       
-      // zRe = zRe2 - zIm2 + cRe
-      zRe = ds_add(ds_add(zRe2, ds_mul(vec2(-1.0, 0.0), zIm2)), cRe);
-      
-      // Update squares
-      zRe2 = ds_mul(zRe, zRe);
-      zIm2 = ds_mul(zIm, zIm);
+      zi = 2.0 * zr * zi + cIm;
+      zr = zr2 - zi2 + cRe;
       
       iteration = i + 1;
     }
@@ -167,9 +103,9 @@ const fragmentShaderSource = `
     if (iteration >= u_maxIterations) {
       gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
-      // Smooth coloring
-      float mag2 = zRe2.x + zIm2.x;
-      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(mag2)));
+      float zr2 = zr * zr;
+      float zi2 = zi * zi;
+      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(zr2 + zi2)));
       float t = smoothed / float(u_maxIterations);
       vec3 color = getColor(t);
       gl_FragColor = vec4(color, 1.0);
@@ -460,7 +396,7 @@ export function useWebGLMandelbrot(
 
   return {
     viewState,
-    isComputing: false, // WebGL is basically instant
+    isComputing: false,
     zoomAt,
     pan,
     reset,
