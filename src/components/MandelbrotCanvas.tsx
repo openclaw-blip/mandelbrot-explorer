@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { useMandelbrot } from '../hooks/useMandelbrot';
+import { useWebGLMandelbrot } from '../hooks/useWebGLMandelbrot';
 import { InfoOverlay } from './InfoOverlay';
 import { HelpOverlay } from './HelpOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
@@ -10,8 +10,8 @@ export function MandelbrotCanvas() {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const { viewState, isComputing, zoomAt, pan, reset, handleResize } = useMandelbrot(canvasRef, {
-    maxIterations: 500,
+  const { viewState, isComputing, zoomAt, pan, reset, handleResize } = useWebGLMandelbrot(canvasRef, {
+    maxIterations: 1000, // Can handle more iterations now!
   });
 
   // Handle resize
