@@ -10,9 +10,9 @@ interface UseWebGLMandelbrotOptions {
   maxIterations?: number;
 }
 
-const vertexShaderSource = `
-  attribute vec2 a_position;
-  varying vec2 v_uv;
+const vertexShaderSource = `#version 300 es
+  in vec2 a_position;
+  out vec2 v_uv;
   
   void main() {
     v_uv = a_position * 0.5 + 0.5;
@@ -20,13 +20,13 @@ const vertexShaderSource = `
   }
 `;
 
-// Double-single precision Mandelbrot shader
-// Based on: https://blog.cyclemap.link/2011-06-09-glsl-part2-emu/
-// and Knuth's "The Art of Computer Programming"
-const fragmentShaderSource = `
+// Double-single precision Mandelbrot shader (WebGL 2.0)
+// Uses 'precise' qualifier to prevent compiler optimizations that break error-free arithmetic
+const fragmentShaderSource = `#version 300 es
   precision highp float;
   
-  varying vec2 v_uv;
+  in vec2 v_uv;
+  out vec4 fragColor;
   
   uniform vec2 u_resolution;
   uniform vec2 u_centerHi;
@@ -37,9 +37,8 @@ const fragmentShaderSource = `
   
   // ============================================
   // Double-Single Arithmetic (Emulated Float64)
+  // Uses 'precise' to prevent optimizations that break error-free arithmetic
   // ============================================
-  // A DS number is stored as vec2(hi, lo) where value ≈ hi + lo
-  // hi contains the high-order bits, lo contains the residual
   
   // Create DS from single float
   vec2 ds(float a) {
@@ -47,70 +46,69 @@ const fragmentShaderSource = `
   }
   
   // Quick Two-Sum: assumes |a| >= |b|
-  vec2 quickTwoSum(float a, float b) {
-    float s = a + b;
-    float e = b - (s - a);
+  precise vec2 quickTwoSum(float a, float b) {
+    precise float s = a + b;
+    precise float e = b - (s - a);
     return vec2(s, e);
   }
   
   // Two-Sum: works for any a, b
-  vec2 twoSum(float a, float b) {
-    float s = a + b;
-    float v = s - a;
-    float e = (a - (s - v)) + (b - v);
+  precise vec2 twoSum(float a, float b) {
+    precise float s = a + b;
+    precise float v = s - a;
+    precise float e = (a - (s - v)) + (b - v);
     return vec2(s, e);
   }
   
-  // Split a float into high and low parts for multiplication
-  // Uses Veltkamp splitting with 12-bit split (for 24-bit mantissa)
-  vec2 split(float a) {
-    float c = 4097.0 * a;  // 2^12 + 1
-    float aHi = c - (c - a);
-    float aLo = a - aHi;
+  // Split a float for Veltkamp/Dekker multiplication
+  precise vec2 split(float a) {
+    precise float c = 4097.0 * a;
+    precise float aHi = c - (c - a);
+    precise float aLo = a - aHi;
     return vec2(aHi, aLo);
   }
   
-  // Two-Product: exact product of two floats
-  vec2 twoProduct(float a, float b) {
-    float p = a * b;
-    vec2 aS = split(a);
-    vec2 bS = split(b);
-    float err = ((aS.x * bS.x - p) + aS.x * bS.y + aS.y * bS.x) + aS.y * bS.y;
+  // Two-Product: exact product using Dekker's algorithm
+  precise vec2 twoProduct(float a, float b) {
+    precise float p = a * b;
+    precise vec2 aS = split(a);
+    precise vec2 bS = split(b);
+    precise float err = ((aS.x * bS.x - p) + aS.x * bS.y + aS.y * bS.x) + aS.y * bS.y;
     return vec2(p, err);
   }
   
   // DS + DS
   vec2 dsAdd(vec2 a, vec2 b) {
-    vec2 s = twoSum(a.x, b.x);
-    vec2 t = twoSum(a.y, b.y);
-    s.y += t.x;
-    s = quickTwoSum(s.x, s.y);
-    s.y += t.y;
-    s = quickTwoSum(s.x, s.y);
+    precise vec2 s = twoSum(a.x, b.x);
+    precise vec2 t = twoSum(a.y, b.y);
+    precise float sy = s.y + t.x;
+    s = quickTwoSum(s.x, sy);
+    sy = s.y + t.y;
+    s = quickTwoSum(s.x, sy);
     return s;
   }
   
   // DS + float
   vec2 dsAddF(vec2 a, float b) {
-    vec2 s = twoSum(a.x, b);
-    s.y += a.y;
-    s = quickTwoSum(s.x, s.y);
+    precise vec2 s = twoSum(a.x, b);
+    precise float sy = s.y + a.y;
+    s = quickTwoSum(s.x, sy);
     return s;
   }
   
   // DS * DS
   vec2 dsMul(vec2 a, vec2 b) {
-    vec2 p = twoProduct(a.x, b.x);
-    p.y += a.x * b.y + a.y * b.x;
-    p = quickTwoSum(p.x, p.y);
+    precise vec2 p = twoProduct(a.x, b.x);
+    precise float py = p.y + a.x * b.y + a.y * b.x;
+    p = quickTwoSum(p.x, py);
     return p;
   }
   
   // DS * float
   vec2 dsMulF(vec2 a, float b) {
-    vec2 p = twoProduct(a.x, b);
-    p.y += a.y * b;
-    p = quickTwoSum(p.x, p.y);
+    precise vec2 p = twoProduct(a.x, b);
+    precise float py = p.y + a.y * b;
+    p = quickTwoSum(p.x, py);
     return p;
   }
   
@@ -209,14 +207,14 @@ const fragmentShaderSource = `
     }
     
     if (iteration >= u_maxIterations) {
-      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      fragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
       // Smooth coloring
       float zRe2 = zRe.x * zRe.x;
       float zIm2 = zIm.x * zIm.x;
       float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(zRe2 + zIm2)));
       float t = smoothed / float(u_maxIterations);
-      gl_FragColor = vec4(getColor(t), 1.0);
+      fragColor = vec4(getColor(t), 1.0);
     }
   }
 `;
@@ -291,12 +289,12 @@ export function useWebGLMandelbrot(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const gl = canvas.getContext('webgl', { 
+    const gl = canvas.getContext('webgl2', { 
       antialias: false,
       preserveDrawingBuffer: true 
-    });
+    }) as WebGLRenderingContext | null;
     if (!gl) {
-      console.error('WebGL not supported');
+      console.error('WebGL 2.0 not supported');
       return;
     }
 
