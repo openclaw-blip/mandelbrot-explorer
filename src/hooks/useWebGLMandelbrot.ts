@@ -159,8 +159,7 @@ const fragmentShaderSource = `#version 300 es
     } else {
       float mag2 = z.x * z.x + z.y * z.y;
       float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(mag2)));
-      // Use logarithmic scaling to spread colors across escape times
-      float t = log(smoothed + 1.0) * 0.15;
+      float t = smoothed * 0.05;
       fragColor = vec4(getColor(t), 1.0);
     }
   }
