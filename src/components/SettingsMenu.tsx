@@ -7,7 +7,7 @@ export function SettingsMenu() {
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
+  // Close on outside click - delay listener to avoid catching the opening click
   useEffect(() => {
     if (!isOpen) return;
     
@@ -17,8 +17,15 @@ export function SettingsMenu() {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // Delay adding listener to next frame so we don't catch the opening click
+    const id = requestAnimationFrame(() => {
+      document.addEventListener('click', handleClickOutside);
+    });
+    
+    return () => {
+      cancelAnimationFrame(id);
+      document.removeEventListener('click', handleClickOutside);
+    };
   }, [isOpen]);
 
   const handleCopyLink = useCallback(async () => {
@@ -47,29 +54,36 @@ export function SettingsMenu() {
     }, 800);
   }, []);
 
+  const toggleMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOpen(prev => !prev);
+  }, []);
+
   return (
     <div className="settings-menu" ref={menuRef}>
       <button 
         className={`settings-toggle ${isOpen ? 'open' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
+        onClick={toggleMenu}
         onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
         aria-label="Settings"
       >
         ⚙
       </button>
       
       {isOpen && (
-        <div className="settings-dropdown">
+        <div 
+          className="settings-dropdown"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
           <button 
             className={`settings-item ${copyState}`}
             onClick={(e) => {
               e.stopPropagation();
               handleCopyLink();
             }}
-            onMouseDown={(e) => e.stopPropagation()}
           >
             <span className="settings-icon">
               {copyState === 'success' ? '✓' : copyState === 'error' ? '✗' : '🔗'}
