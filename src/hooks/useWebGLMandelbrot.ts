@@ -49,7 +49,7 @@ const fragmentShaderSource = `#version 300 es
   
   // Dynamic color palette
   vec3 getColor(float t) {
-    float scaledT = t * 4.0;
+    float scaledT = t * 20.0;  // Cycle through palette multiple times
     int idx = int(mod(scaledT, 8.0));
     int nextIdx = int(mod(scaledT + 1.0, 8.0));
     float fract_t = fract(scaledT);
@@ -159,7 +159,9 @@ const fragmentShaderSource = `#version 300 es
     } else {
       float mag2 = z.x * z.x + z.y * z.y;
       float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(mag2)));
-      float t = smoothed / float(u_maxIterations);
+      // Use logarithmic scaling to spread colors across escape times
+      // and multiply to cycle through palette multiple times
+      float t = log(smoothed + 1.0) * 0.3;
       fragColor = vec4(getColor(t), 1.0);
     }
   }
