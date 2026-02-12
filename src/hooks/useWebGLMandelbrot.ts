@@ -13,6 +13,13 @@ export type FractalSet = {
   type: 'julia';
   cr: number;
   ci: number;
+} | {
+  type: 'burning-ship';
+} | {
+  type: 'tricorn';
+} | {
+  type: 'multibrot';
+  power: number;
 };
 
 interface UseWebGLMandelbrotOptions {
@@ -51,8 +58,9 @@ const fragmentShaderSource = `#version 300 es
   // Color palette uniforms
   uniform vec3 u_colors[8];
   uniform int u_colorScale;  // 0 = log, 1 = linear
-  uniform int u_setType;     // 0 = Mandelbrot, 1 = Julia
+  uniform int u_setType;     // 0 = Mandelbrot, 1 = Julia, 2 = Burning Ship, 3 = Tricorn, 4 = Multibrot
   uniform vec2 u_juliaC;     // c parameter for Julia set
+  uniform float u_power;     // power for Multibrot
   
   // Fetch reference orbit value Z_n from texture
   vec2 getRefZ(int n) {
@@ -90,6 +98,15 @@ const fragmentShaderSource = `#version 300 es
     return mix(c1, c2, factor);
   }
   
+  // Complex power using polar form: z^n = r^n * e^(i*n*theta)
+  vec2 cpow(vec2 z, float n) {
+    float r = length(z);
+    if (r == 0.0) return vec2(0.0);
+    float theta = atan(z.y, z.x);
+    float rn = pow(r, n);
+    return vec2(rn * cos(n * theta), rn * sin(n * theta));
+  }
+  
   void main() {
     // Pixel offset from view center
     float px = v_uv.x - 0.5;
@@ -98,38 +115,28 @@ const fragmentShaderSource = `#version 300 es
     vec2 pixelCoord = u_center + pixelOffset;
     
     vec2 z;
+    vec2 c;
     int iteration = 0;
     bool escaped = false;
     
+    // Set up initial z and c based on fractal type
     if (u_setType == 1) {
-      // Julia set: z starts at pixel, c is fixed
+      // Julia: z = pixel, c = fixed
       z = pixelCoord;
-      vec2 c = u_juliaC;
-      
-      for (int i = 0; i < 10000; i++) {
-        if (i >= u_maxIterations) break;
-        
-        float mag2 = z.x * z.x + z.y * z.y;
-        if (mag2 > 4.0) {
-          escaped = true;
-          break;
-        }
-        
-        float zr2 = z.x * z.x;
-        float zi2 = z.y * z.y;
-        z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
-        iteration = i + 1;
-      }
+      c = u_juliaC;
     } else {
-      // Mandelbrot set: use perturbation theory
-      // Delta c = (pixel's c) - refPoint
+      // All others: z = 0, c = pixel
+      z = vec2(0.0);
+      c = pixelCoord;
+    }
+    
+    // Use perturbation theory only for standard Mandelbrot (setType 0)
+    if (u_setType == 0) {
       vec2 dc = pixelOffset - u_refOffset;
-      
       vec2 dz = vec2(0.0, 0.0);
       z = vec2(0.0, 0.0);
       bool useDirectCompute = false;
       
-      // Phase 1: Perturbation while we have reference orbit
       for (int i = 0; i < 10000; i++) {
         if (i >= u_refOrbitLen || i >= u_maxIterations) {
           useDirectCompute = (i < u_maxIterations);
@@ -145,14 +152,12 @@ const fragmentShaderSource = `#version 300 es
           break;
         }
         
-        // Check if delta is getting too large (glitch detection)
         float dzMag2 = dz.x * dz.x + dz.y * dz.y;
         if (dzMag2 > 1e6) {
           useDirectCompute = true;
           break;
         }
         
-        // δz_new = 2·Z·δz + δz² + δc
         vec2 twoZdz = 2.0 * vec2(Zn.x * dz.x - Zn.y * dz.y, Zn.x * dz.y + Zn.y * dz.x);
         vec2 dz2 = vec2(dz.x * dz.x - dz.y * dz.y, 2.0 * dz.x * dz.y);
         dz = twoZdz + dz2 + dc;
@@ -160,10 +165,7 @@ const fragmentShaderSource = `#version 300 es
         iteration = i + 1;
       }
       
-      // Phase 2: Direct computation if needed
       if (useDirectCompute && !escaped) {
-        vec2 c = pixelCoord;
-        
         for (int i = iteration; i < 10000; i++) {
           if (i >= u_maxIterations) break;
           
@@ -173,12 +175,40 @@ const fragmentShaderSource = `#version 300 es
             break;
           }
           
-          float zr2 = z.x * z.x;
-          float zi2 = z.y * z.y;
-          z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
-          
+          z = vec2(z.x * z.x - z.y * z.y + c.x, 2.0 * z.x * z.y + c.y);
           iteration = i + 1;
         }
+      }
+    } else {
+      // Direct computation for Julia, Burning Ship, Tricorn, Multibrot
+      for (int i = 0; i < 10000; i++) {
+        if (i >= u_maxIterations) break;
+        
+        float mag2 = z.x * z.x + z.y * z.y;
+        if (mag2 > 4.0) {
+          escaped = true;
+          break;
+        }
+        
+        if (u_setType == 1) {
+          // Julia: z² + c
+          z = vec2(z.x * z.x - z.y * z.y + c.x, 2.0 * z.x * z.y + c.y);
+        } else if (u_setType == 2) {
+          // Burning Ship: (|Re(z)| + i|Im(z)|)² + c
+          float ax = abs(z.x);
+          float ay = abs(z.y);
+          z = vec2(ax * ax - ay * ay + c.x, 2.0 * ax * ay + c.y);
+        } else if (u_setType == 3) {
+          // Tricorn: conj(z)² + c
+          float zr = z.x;
+          float zi = -z.y;  // conjugate
+          z = vec2(zr * zr - zi * zi + c.x, 2.0 * zr * zi + c.y);
+        } else if (u_setType == 4) {
+          // Multibrot: z^power + c
+          z = cpow(z, u_power) + c;
+        }
+        
+        iteration = i + 1;
       }
     }
     
@@ -373,6 +403,7 @@ export function useWebGLMandelbrot(
     colorScale: WebGLUniformLocation | null;
     setType: WebGLUniformLocation | null;
     juliaC: WebGLUniformLocation | null;
+    power: WebGLUniformLocation | null;
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
@@ -442,6 +473,7 @@ export function useWebGLMandelbrot(
       colorScale: gl.getUniformLocation(program, 'u_colorScale'),
       setType: gl.getUniformLocation(program, 'u_setType'),
       juliaC: gl.getUniformLocation(program, 'u_juliaC'),
+      power: gl.getUniformLocation(program, 'u_power'),
     };
 
     glRef.current = gl;
@@ -484,11 +516,15 @@ export function useWebGLMandelbrot(
       const colorData = new Float32Array(theme.colors.flat());
       gl.uniform3fv(uniformsRef.current!.colors, colorData);
       gl.uniform1i(uniformsRef.current!.colorScale, colorScale === 'linear' ? 1 : 0);
-      gl.uniform1i(uniformsRef.current!.setType, fractalSet.type === 'julia' ? 1 : 0);
+      
+      // Set fractal type: 0=Mandelbrot, 1=Julia, 2=Burning Ship, 3=Tricorn, 4=Multibrot
+      const setTypeMap: Record<string, number> = { 'mandelbrot': 0, 'julia': 1, 'burning-ship': 2, 'tricorn': 3, 'multibrot': 4 };
+      gl.uniform1i(uniformsRef.current!.setType, setTypeMap[fractalSet.type] ?? 0);
       gl.uniform2f(uniformsRef.current!.juliaC, 
         fractalSet.type === 'julia' ? fractalSet.cr : 0,
         fractalSet.type === 'julia' ? fractalSet.ci : 0
       );
+      gl.uniform1f(uniformsRef.current!.power, fractalSet.type === 'multibrot' ? fractalSet.power : 2);
       
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
@@ -566,11 +602,15 @@ export function useWebGLMandelbrot(
     const colorData = new Float32Array(theme.colors.flat());
     gl.uniform3fv(uniforms.colors, colorData);
     gl.uniform1i(uniforms.colorScale, colorScale === 'linear' ? 1 : 0);
-    gl.uniform1i(uniforms.setType, fractalSet.type === 'julia' ? 1 : 0);
+    
+    // Set fractal type: 0=Mandelbrot, 1=Julia, 2=Burning Ship, 3=Tricorn, 4=Multibrot
+    const setTypeMap: Record<string, number> = { 'mandelbrot': 0, 'julia': 1, 'burning-ship': 2, 'tricorn': 3, 'multibrot': 4 };
+    gl.uniform1i(uniforms.setType, setTypeMap[fractalSet.type] ?? 0);
     gl.uniform2f(uniforms.juliaC,
       fractalSet.type === 'julia' ? fractalSet.cr : 0,
       fractalSet.type === 'julia' ? fractalSet.ci : 0
     );
+    gl.uniform1f(uniforms.power, fractalSet.type === 'multibrot' ? fractalSet.power : 2);
     
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);

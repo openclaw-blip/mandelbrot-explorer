@@ -248,6 +248,14 @@ body {
   margin: 6px 8px;
 }
 
+.theme-section-label {
+  padding: 4px 12px 2px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .theme-item {
   width: 100%;
   display: flex;

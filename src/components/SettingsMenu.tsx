@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { ColorTheme } from '../colorThemes';
 import { interestingLocations } from '../locations';
 import { FractalSet } from '../hooks/useWebGLMandelbrot';
-import { JuliaPreset } from '../juliaSets';
+import { JuliaPreset, MultibrotPreset } from '../juliaSets';
 
 type CopyState = 'idle' | 'success' | 'error';
 
@@ -15,6 +15,7 @@ interface SettingsMenuProps {
   fractalSet: FractalSet;
   onFractalSetChange: (set: FractalSet) => void;
   juliaPresets: JuliaPreset[];
+  multibrotPresets: MultibrotPreset[];
   onScreenshot: () => void;
   onReset: () => void;
   onFullscreen: () => void;
@@ -77,7 +78,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, fractalSet, onFractalSetChange, juliaPresets, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
+export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, fractalSet, onFractalSetChange, juliaPresets, multibrotPresets, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
@@ -259,7 +260,52 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                 <span className="theme-name">Mandelbrot</span>
                 {fractalSet.type === 'mandelbrot' && <span className="theme-check">✓</span>}
               </button>
+              <button
+                className={`theme-item ${fractalSet.type === 'burning-ship' ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFractalSetChange({ type: 'burning-ship' });
+                  setShowSets(false);
+                  setIsOpen(false);
+                }}
+              >
+                <span className="theme-name">Burning Ship</span>
+                {fractalSet.type === 'burning-ship' && <span className="theme-check">✓</span>}
+              </button>
+              <button
+                className={`theme-item ${fractalSet.type === 'tricorn' ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFractalSetChange({ type: 'tricorn' });
+                  setShowSets(false);
+                  setIsOpen(false);
+                }}
+              >
+                <span className="theme-name">Tricorn</span>
+                {fractalSet.type === 'tricorn' && <span className="theme-check">✓</span>}
+              </button>
               <div className="theme-divider" />
+              <div className="theme-section-label">Multibrot (z^n + c)</div>
+              {multibrotPresets.map(preset => {
+                const isActive = fractalSet.type === 'multibrot' && fractalSet.power === preset.power;
+                return (
+                  <button
+                    key={preset.id}
+                    className={`theme-item ${isActive ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFractalSetChange({ type: 'multibrot', power: preset.power });
+                      setShowSets(false);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="theme-name">{preset.name}</span>
+                    {isActive && <span className="theme-check">✓</span>}
+                  </button>
+                );
+              })}
+              <div className="theme-divider" />
+              <div className="theme-section-label">Julia Sets</div>
               {juliaPresets.map(preset => {
                 const isActive = fractalSet.type === 'julia' && 
                   fractalSet.cr === preset.cr && fractalSet.ci === preset.ci;
@@ -274,7 +320,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                       setIsOpen(false);
                     }}
                   >
-                    <span className="theme-name">Julia: {preset.name}</span>
+                    <span className="theme-name">{preset.name}</span>
                     {isActive && <span className="theme-check">✓</span>}
                   </button>
                 );

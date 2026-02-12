@@ -5,7 +5,7 @@ import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
 import { Minimap } from './Minimap';
 import { ColorTheme, colorThemes, defaultTheme, getThemeById } from '../colorThemes';
-import { juliaPresets, fractalSetFromUrlParams, fractalSetToUrlParams } from '../juliaSets';
+import { juliaPresets, multibrotPresets, fractalSetFromUrlParams, fractalSetToUrlParams } from '../juliaSets';
 
 // Read theme from URL hash
 function getThemeFromUrl(): ColorTheme {
@@ -139,10 +139,16 @@ export function MandelbrotCanvas() {
   const handleFractalSetChange = useCallback((newSet: FractalSet) => {
     setFractalSet(newSet);
     updateFractalSetInUrl(newSet);
-    // Reset view to show entire set
-    // Mandelbrot: centered at (-0.5, 0), Julia: centered at (0, 0)
-    const centerX = newSet.type === 'mandelbrot' ? -0.5 : 0;
-    navigateTo(centerX, 0, 1);
+    // Reset view to show entire set with appropriate center
+    // Mandelbrot: (-0.5, 0), Burning Ship: (-0.4, -0.5), others: (0, 0)
+    let centerX = 0, centerY = 0;
+    if (newSet.type === 'mandelbrot') {
+      centerX = -0.5;
+    } else if (newSet.type === 'burning-ship') {
+      centerX = -0.4;
+      centerY = -0.5;
+    }
+    navigateTo(centerX, centerY, 1);
   }, [navigateTo]);
 
   // Handle resize
@@ -390,6 +396,7 @@ export function MandelbrotCanvas() {
         fractalSet={fractalSet}
         onFractalSetChange={handleFractalSetChange}
         juliaPresets={juliaPresets}
+        multibrotPresets={multibrotPresets}
         onScreenshot={handleScreenshot}
         onReset={reset}
         onFullscreen={toggleFullscreen}
