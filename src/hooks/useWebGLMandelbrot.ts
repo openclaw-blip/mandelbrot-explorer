@@ -51,10 +51,21 @@ const fragmentShaderSource = `
     return vec2(hi, lo);
   }
   
-  // Multiply two double-singles
+  // Multiply two double-singles (no fma in WebGL 1.0)
   vec2 ds_mul(vec2 a, vec2 b) {
+    // Split floats for Dekker multiplication
+    float split = 4097.0; // 2^12 + 1
+    float cona = a.x * split;
+    float conb = b.x * split;
+    float a1 = cona - (cona - a.x);
+    float b1 = conb - (conb - b.x);
+    float a2 = a.x - a1;
+    float b2 = b.x - b1;
+    
     float hi = a.x * b.x;
-    float lo = fma(a.x, b.x, -hi) + a.x * b.y + a.y * b.x;
+    float lo = ((a1 * b1 - hi) + a1 * b2 + a2 * b1) + a2 * b2;
+    lo = lo + a.x * b.y + a.y * b.x;
+    
     float s = hi + lo;
     return vec2(s, lo - (s - hi));
   }
