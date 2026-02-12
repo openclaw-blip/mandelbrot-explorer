@@ -338,6 +338,7 @@ export function useWebGLMandelbrot(
   const currentViewRef = useRef<ViewState>(initialView);
   const lastRefPointRef = useRef<{ centerX: number; centerY: number; refX: number; refY: number; escapeIter: number; zoom: number } | null>(null);
   const urlUpdateTimeoutRef = useRef<number>();
+  const isAnimatingRef = useRef<boolean>(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -458,7 +459,7 @@ export function useWebGLMandelbrot(
     const viewWidth = 4 / view.zoom;
     const viewHeight = viewWidth / aspectRatio;
 
-    // Compute reference orbit (recompute if view changed or ref point is out of view)
+    // Compute reference orbit (skip during animation for smooth zooming)
     const lastRef = lastRefPointRef.current;
     
     // Check if old reference point is still within current view
@@ -466,8 +467,9 @@ export function useWebGLMandelbrot(
       Math.abs(lastRef.refX - view.centerX) < viewWidth * 0.4 &&
       Math.abs(lastRef.refY - view.centerY) < viewHeight * 0.4;
     
-    const needNewRef = !lastRef || !refInView ||
-      Math.abs(lastRef.zoom - view.zoom) > view.zoom * 0.5;
+    // Don't recompute during animation - wait for it to settle
+    const needNewRef = !isAnimatingRef.current && (!lastRef || !refInView ||
+      Math.abs(lastRef.zoom - view.zoom) > view.zoom * 0.5);
     
     let refOrbitLen = lastRef?.escapeIter ?? maxIterations;
     let refX = lastRef?.refX ?? view.centerX;
@@ -512,6 +514,7 @@ export function useWebGLMandelbrot(
   const animateTo = useCallback((target: ViewState, duration: number = 300) => {
     const startView = { ...currentViewRef.current };
     const startTime = performance.now();
+    isAnimatingRef.current = true;
     
     const animate = (time: number) => {
       const elapsed = time - startTime;
@@ -531,7 +534,9 @@ export function useWebGLMandelbrot(
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        // Update URL when animation completes
+        // Animation complete - update reference and URL
+        isAnimatingRef.current = false;
+        render(currentView); // Re-render with potentially new reference
         updateUrl(currentView);
       }
     };
