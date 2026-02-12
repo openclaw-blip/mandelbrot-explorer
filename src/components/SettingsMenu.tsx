@@ -56,6 +56,10 @@ function HelpModal({ onClose }: { onClose: () => void }) {
           <span className="help-key">F</span>
           <span className="help-action">Fullscreen</span>
         </div>
+        <div className="help-row">
+          <span className="help-key">↑ / ↓</span>
+          <span className="help-action">Cycle colors</span>
+        </div>
         <button className="help-close" onClick={onClose}>Close</button>
       </div>
     </div>

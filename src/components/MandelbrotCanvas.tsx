@@ -86,12 +86,19 @@ export function MandelbrotCanvas() {
         reset();
       } else if (e.key === 'f' || e.key === 'F') {
         toggleFullscreen();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const currentIndex = colorThemes.findIndex(t => t.id === theme.id);
+        const newIndex = e.key === 'ArrowUp' 
+          ? (currentIndex - 1 + colorThemes.length) % colorThemes.length
+          : (currentIndex + 1) % colorThemes.length;
+        handleThemeChange(colorThemes[newIndex]);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [reset]);
+  }, [reset, theme, handleThemeChange]);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
