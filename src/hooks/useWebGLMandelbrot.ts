@@ -29,11 +29,12 @@ const fragmentShaderSource = `#version 300 es
   out vec4 fragColor;
   
   uniform vec2 u_resolution;
-  uniform vec2 u_deltaC;     // Offset from reference for this pixel's position in view
-  uniform vec2 u_viewScale;  // (viewWidth, viewHeight)
+  uniform vec2 u_center;      // View center
+  uniform vec2 u_refPoint;    // Reference point (may differ from center)
+  uniform vec2 u_viewScale;   // (viewWidth, viewHeight)
   uniform int u_maxIterations;
-  uniform int u_refOrbitLen; // Actual length of reference orbit
-  uniform sampler2D u_refOrbit; // Reference orbit texture (Z_n values)
+  uniform int u_refOrbitLen;  // Actual length of reference orbit
+  uniform sampler2D u_refOrbit;
   
   // Fetch reference orbit value Z_n from texture
   vec2 getRefZ(int n) {
@@ -82,10 +83,13 @@ const fragmentShaderSource = `#version 300 es
   }
   
   void main() {
-    // Delta c for this pixel (offset from reference point)
+    // This pixel's c value
     float px = v_uv.x - 0.5;
     float py = v_uv.y - 0.5;
-    vec2 dc = vec2(px * u_viewScale.x, py * u_viewScale.y);
+    vec2 pixelC = u_center + vec2(px * u_viewScale.x, py * u_viewScale.y);
+    
+    // Delta c = pixel's c - reference point
+    vec2 dc = pixelC - u_refPoint;
     
     // Perturbation iteration
     vec2 dz = vec2(0.0, 0.0);
@@ -129,12 +133,8 @@ const fragmentShaderSource = `#version 300 es
     
     // Phase 2: Direct computation if needed (when reference orbit ran out)
     if (useDirectCompute && !escaped) {
-      // Continue with direct iteration using current z value
-      // Note: c = reference_c + dc, but we just use z directly
-      vec2 c = getRefZ(0) + dc; // c = 0 + dc since Z_0 = 0... actually c = ref_c + dc
-      // Actually we need the actual c value. At pixel, c = center + dc
-      // Since reference is at center, c for this pixel = center + dc
-      // But we don't have center in shader... let's approximate with z iteration
+      // Continue with direct iteration using current z value and actual c
+      vec2 c = pixelC;
       
       for (int i = iteration; i < 10000; i++) {
         if (i >= u_maxIterations) break;
@@ -145,12 +145,10 @@ const fragmentShaderSource = `#version 300 es
           break;
         }
         
-        // z = z² + c, but we don't have c exactly
-        // Use: z_new = z² + (first z after perturbation phase) as approximation
-        // Actually this won't work well. Let's just mark as in-set for now.
+        // z = z² + c
         float zr2 = z.x * z.x;
         float zi2 = z.y * z.y;
-        z = vec2(zr2 - zi2, 2.0 * z.x * z.y) + dc; // Approximate c with dc (works near center)
+        z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
         
         iteration = i + 1;
       }
@@ -205,17 +203,62 @@ function createProgram(gl: WebGL2RenderingContext, vertexShader: WebGLShader, fr
 
 interface ReferenceOrbit {
   data: Float32Array;
-  escapeIter: number; // When reference escaped (or maxIterations if didn't)
+  escapeIter: number;
+  refX: number;
+  refY: number;
 }
 
-// Compute reference orbit at center point using JavaScript's float64
-function computeReferenceOrbit(centerX: number, centerY: number, maxIterations: number): ReferenceOrbit {
-  const orbit = new Float32Array(maxIterations * 2); // [re0, im0, re1, im1, ...]
+// Find a good reference point - one that escapes late or not at all
+function findBestReference(centerX: number, centerY: number, viewWidth: number, viewHeight: number, maxIterations: number): { x: number; y: number; escapeIter: number } {
+  // Test center first
+  let bestX = centerX;
+  let bestY = centerY;
+  let bestEscape = testEscape(centerX, centerY, maxIterations);
   
-  let zr = 0;
-  let zi = 0;
-  const cr = centerX;
-  const ci = centerY;
+  // If center is good enough (escapes late), use it
+  if (bestEscape >= maxIterations * 0.8) {
+    return { x: bestX, y: bestY, escapeIter: bestEscape };
+  }
+  
+  // Search in a grid pattern for a better reference
+  const searchPoints = [
+    [0, 0], [-0.25, 0], [0.25, 0], [0, -0.25], [0, 0.25],
+    [-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25],
+    [-0.1, 0], [0.1, 0], [0, -0.1], [0, 0.1]
+  ];
+  
+  for (const [dx, dy] of searchPoints) {
+    const testX = centerX + dx * viewWidth;
+    const testY = centerY + dy * viewHeight;
+    const escape = testEscape(testX, testY, maxIterations);
+    if (escape > bestEscape) {
+      bestX = testX;
+      bestY = testY;
+      bestEscape = escape;
+      if (bestEscape >= maxIterations) break; // Found one in the set
+    }
+  }
+  
+  return { x: bestX, y: bestY, escapeIter: bestEscape };
+}
+
+function testEscape(x: number, y: number, maxIterations: number): number {
+  let zr = 0, zi = 0;
+  for (let i = 0; i < maxIterations; i++) {
+    const zr2 = zr * zr;
+    const zi2 = zi * zi;
+    if (zr2 + zi2 > 4.0) return i;
+    const newZr = zr2 - zi2 + x;
+    zi = 2 * zr * zi + y;
+    zr = newZr;
+  }
+  return maxIterations;
+}
+
+function computeReferenceOrbit(refX: number, refY: number, maxIterations: number): ReferenceOrbit {
+  const orbit = new Float32Array(maxIterations * 2);
+  
+  let zr = 0, zi = 0;
   let escapeIter = maxIterations;
   
   for (let i = 0; i < maxIterations; i++) {
@@ -227,7 +270,6 @@ function computeReferenceOrbit(centerX: number, centerY: number, maxIterations: 
     
     if (zr2 + zi2 > 4.0) {
       escapeIter = i;
-      // Fill rest with escape values for safety
       for (let j = i + 1; j < maxIterations; j++) {
         orbit[j * 2] = zr;
         orbit[j * 2 + 1] = zi;
@@ -235,13 +277,12 @@ function computeReferenceOrbit(centerX: number, centerY: number, maxIterations: 
       break;
     }
     
-    const newZr = zr2 - zi2 + cr;
-    const newZi = 2 * zr * zi + ci;
+    const newZr = zr2 - zi2 + refX;
+    zi = 2 * zr * zi + refY;
     zr = newZr;
-    zi = newZi;
   }
   
-  return { data: orbit, escapeIter };
+  return { data: orbit, escapeIter, refX, refY };
 }
 
 export function useWebGLMandelbrot(
@@ -261,7 +302,8 @@ export function useWebGLMandelbrot(
   const refOrbitTexRef = useRef<WebGLTexture | null>(null);
   const uniformsRef = useRef<{
     resolution: WebGLUniformLocation | null;
-    deltaC: WebGLUniformLocation | null;
+    center: WebGLUniformLocation | null;
+    refPoint: WebGLUniformLocation | null;
     viewScale: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
     refOrbitLen: WebGLUniformLocation | null;
@@ -270,7 +312,7 @@ export function useWebGLMandelbrot(
   
   const animationFrameRef = useRef<number>();
   const currentViewRef = useRef<ViewState>(viewState);
-  const lastRefPointRef = useRef<{ x: number; y: number; escapeIter: number } | null>(null);
+  const lastRefPointRef = useRef<{ centerX: number; centerY: number; refX: number; refY: number; escapeIter: number; zoom: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -321,7 +363,8 @@ export function useWebGLMandelbrot(
 
     uniformsRef.current = {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
-      deltaC: gl.getUniformLocation(program, 'u_deltaC'),
+      center: gl.getUniformLocation(program, 'u_center'),
+      refPoint: gl.getUniformLocation(program, 'u_refPoint'),
       viewScale: gl.getUniformLocation(program, 'u_viewScale'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
       refOrbitLen: gl.getUniformLocation(program, 'u_refOrbitLen'),
@@ -340,21 +383,23 @@ export function useWebGLMandelbrot(
       
       // Need to get render function - call it directly here
       const view = currentViewRef.current;
-      const orbit = computeReferenceOrbit(view.centerX, view.centerY, maxIterations);
-      
-      gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, maxIterations, 1, 0, gl.RG, gl.FLOAT, orbit.data);
-      lastRefPointRef.current = { x: view.centerX, y: view.centerY, escapeIter: orbit.escapeIter };
-      
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.useProgram(program);
-      
       const aspectRatio = canvas.width / canvas.height;
       const viewWidth = 4 / view.zoom;
       const viewHeight = viewWidth / aspectRatio;
       
+      const bestRef = findBestReference(view.centerX, view.centerY, viewWidth, viewHeight, maxIterations);
+      const orbit = computeReferenceOrbit(bestRef.x, bestRef.y, maxIterations);
+      
+      gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, maxIterations, 1, 0, gl.RG, gl.FLOAT, orbit.data);
+      lastRefPointRef.current = { centerX: view.centerX, centerY: view.centerY, refX: bestRef.x, refY: bestRef.y, escapeIter: orbit.escapeIter, zoom: view.zoom };
+      
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(program);
+      
       gl.uniform2f(uniformsRef.current!.resolution, canvas.width, canvas.height);
-      gl.uniform2f(uniformsRef.current!.deltaC, 0, 0);
+      gl.uniform2f(uniformsRef.current!.center, view.centerX, view.centerY);
+      gl.uniform2f(uniformsRef.current!.refPoint, bestRef.x, bestRef.y);
       gl.uniform2f(uniformsRef.current!.viewScale, viewWidth, viewHeight);
       gl.uniform1i(uniformsRef.current!.maxIterations, maxIterations);
       gl.uniform1i(uniformsRef.current!.refOrbitLen, orbit.escapeIter);
@@ -381,38 +426,42 @@ export function useWebGLMandelbrot(
     
     if (!gl || !program || !uniforms || !canvas || !refOrbitTex) return;
 
-    // Compute reference orbit at center (recompute if center changed significantly)
+    const aspectRatio = canvas.width / canvas.height;
+    const viewWidth = 4 / view.zoom;
+    const viewHeight = viewWidth / aspectRatio;
+
+    // Compute reference orbit (recompute if view changed significantly)
     const lastRef = lastRefPointRef.current;
     const needNewRef = !lastRef || 
-      Math.abs(lastRef.x - view.centerX) > 1e-10 || 
-      Math.abs(lastRef.y - view.centerY) > 1e-10;
+      Math.abs(lastRef.centerX - view.centerX) > viewWidth * 0.01 || 
+      Math.abs(lastRef.centerY - view.centerY) > viewHeight * 0.01 ||
+      Math.abs(lastRef.zoom - view.zoom) > view.zoom * 0.1;
     
     let refOrbitLen = lastRef?.escapeIter ?? maxIterations;
+    let refX = lastRef?.refX ?? view.centerX;
+    let refY = lastRef?.refY ?? view.centerY;
     
     if (needNewRef) {
-      const orbit = computeReferenceOrbit(view.centerX, view.centerY, maxIterations);
+      // Find best reference point
+      const bestRef = findBestReference(view.centerX, view.centerY, viewWidth, viewHeight, maxIterations);
+      refX = bestRef.x;
+      refY = bestRef.y;
+      
+      const orbit = computeReferenceOrbit(refX, refY, maxIterations);
       refOrbitLen = orbit.escapeIter;
       
-      // Upload orbit to texture (RG32F format for two floats per texel)
       gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
-      gl.texImage2D(
-        gl.TEXTURE_2D, 0, gl.RG32F,
-        maxIterations, 1, 0,
-        gl.RG, gl.FLOAT, orbit.data
-      );
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, maxIterations, 1, 0, gl.RG, gl.FLOAT, orbit.data);
       
-      lastRefPointRef.current = { x: view.centerX, y: view.centerY, escapeIter: refOrbitLen };
+      lastRefPointRef.current = { centerX: view.centerX, centerY: view.centerY, refX, refY, escapeIter: refOrbitLen, zoom: view.zoom };
     }
 
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(program);
 
-    const aspectRatio = canvas.width / canvas.height;
-    const viewWidth = 4 / view.zoom;
-    const viewHeight = viewWidth / aspectRatio;
-
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-    gl.uniform2f(uniforms.deltaC, 0, 0); // Reference is at center, so no delta for uniform
+    gl.uniform2f(uniforms.center, view.centerX, view.centerY);
+    gl.uniform2f(uniforms.refPoint, refX, refY);
     gl.uniform2f(uniforms.viewScale, viewWidth, viewHeight);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
     gl.uniform1i(uniforms.refOrbitLen, refOrbitLen);
