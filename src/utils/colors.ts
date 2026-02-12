@@ -16,10 +16,13 @@ export function getColor(iteration: number, maxIterations: number): [number, num
   }
 
   // Smooth coloring using escape time algorithm with continuous potential
-  const smoothed = iteration + 1 - Math.log2(Math.log2(iteration + 1));
+  // Guard against log2 edge cases when iteration is very low
+  const logVal = Math.max(1, iteration + 1);
+  const innerLog = Math.log2(logVal);
+  const smoothed = iteration + 1 - (innerLog > 0 ? Math.log2(innerLog) : 0);
   
   // Create smooth gradient through color palette
-  const colorScale = (smoothed / maxIterations) * (COLORS.length - 1) * 4;
+  const colorScale = Math.abs((smoothed / maxIterations) * (COLORS.length - 1) * 4);
   const colorIndex = Math.floor(colorScale) % COLORS.length;
   const nextColorIndex = (colorIndex + 1) % COLORS.length;
   const t = colorScale - Math.floor(colorScale);
@@ -27,6 +30,11 @@ export function getColor(iteration: number, maxIterations: number): [number, num
   // Smooth interpolation between colors
   const c1 = COLORS[colorIndex];
   const c2 = COLORS[nextColorIndex];
+  
+  // Safety check in case of edge cases
+  if (!c1 || !c2) {
+    return [255, 0, 255]; // Fallback to hot pink
+  }
   
   // Use cosine interpolation for smoother gradients
   const factor = (1 - Math.cos(t * Math.PI)) / 2;
