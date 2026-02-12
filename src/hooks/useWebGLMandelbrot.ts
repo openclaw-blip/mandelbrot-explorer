@@ -695,10 +695,10 @@ export function useWebGLMandelbrot(
       zoom: newZoom,
     };
     
-    // Calculate duration based on how far we're traveling
+    // Calculate duration based on how far we're traveling (longer for big zoom changes)
     const currentZoom = currentViewRef.current.zoom;
     const zoomRatio = Math.max(newZoom / currentZoom, currentZoom / newZoom);
-    const duration = Math.min(300 + Math.log10(zoomRatio) * 400, 2000);
+    const duration = Math.min(1000 + Math.log10(zoomRatio) * 2000, 15000);
     
     animateTo(target, duration);
   }, [animateTo]);
