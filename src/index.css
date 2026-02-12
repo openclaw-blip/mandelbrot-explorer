@@ -55,12 +55,13 @@ body {
   z-index: 100;
 }
 
-.info-coord {
-  color: rgba(255, 255, 255, 0.6);
+.info-item {
+  display: flex;
+  gap: 4px;
 }
 
-.info-zoom {
-  color: rgba(255, 255, 255, 0.8);
+.info-label {
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .loading-indicator {

@@ -4,14 +4,42 @@ import { InfoOverlay } from './InfoOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
 import { Minimap } from './Minimap';
-import { ColorTheme, colorThemes, defaultTheme } from '../colorThemes';
+import { ColorTheme, colorThemes, defaultTheme, getThemeById } from '../colorThemes';
+
+// Read theme from URL hash
+function getThemeFromUrl(): ColorTheme {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return defaultTheme;
+  const params = new URLSearchParams(hash);
+  const themeId = params.get('t');
+  return themeId ? getThemeById(themeId) : defaultTheme;
+}
+
+// Update theme in URL hash (preserving other params)
+function updateThemeInUrl(themeId: string) {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  if (themeId === defaultTheme.id) {
+    params.delete('t');
+  } else {
+    params.set('t', themeId);
+  }
+  const newHash = params.toString();
+  window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
+}
 
 export function MandelbrotCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [theme, setTheme] = useState<ColorTheme>(defaultTheme);
+  const [theme, setTheme] = useState<ColorTheme>(() => getThemeFromUrl());
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Update URL when theme changes
+  const handleThemeChange = useCallback((newTheme: ColorTheme) => {
+    setTheme(newTheme);
+    updateThemeInUrl(newTheme.id);
+  }, []);
 
   const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
@@ -140,7 +168,7 @@ export function MandelbrotCanvas() {
       <SettingsMenu 
         themes={colorThemes}
         currentTheme={theme}
-        onThemeChange={setTheme}
+        onThemeChange={handleThemeChange}
       />
       <LoadingIndicator visible={isComputing} />
     </>
