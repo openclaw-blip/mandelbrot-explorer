@@ -158,7 +158,8 @@ body {
   position: absolute;
   top: 20px;
   right: 20px;
-  z-index: 100;
+  z-index: 1000;
+  pointer-events: auto;
 }
 
 .settings-toggle {
@@ -175,6 +176,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: auto;
+  position: relative;
 }
 
 .settings-toggle:hover,

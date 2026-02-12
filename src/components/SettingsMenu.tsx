@@ -57,8 +57,9 @@ export function SettingsMenu() {
   const toggleMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    alert('clicked! isOpen=' + isOpen);
     setIsOpen(prev => !prev);
-  }, []);
+  }, [isOpen]);
 
   return (
     <div className="settings-menu" ref={menuRef}>
