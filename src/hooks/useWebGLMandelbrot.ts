@@ -20,8 +20,8 @@ const vertexShaderSource = `#version 300 es
   }
 `;
 
-// Double-single precision Mandelbrot shader (WebGL 2.0)
-// Uses 'precise' qualifier to prevent compiler optimizations that break error-free arithmetic
+// Perturbation theory shader
+// Reference orbit is precomputed on CPU, shader only computes deltas
 const fragmentShaderSource = `#version 300 es
   precision highp float;
   
@@ -29,99 +29,19 @@ const fragmentShaderSource = `#version 300 es
   out vec4 fragColor;
   
   uniform vec2 u_resolution;
-  uniform vec2 u_centerHi;
-  uniform vec2 u_centerLo;
-  uniform vec2 u_scaleHi;  // (viewWidth, viewHeight) high bits
-  uniform vec2 u_scaleLo;  // (viewWidth, viewHeight) low bits
+  uniform vec2 u_deltaC;     // Offset from reference for this pixel's position in view
+  uniform vec2 u_viewScale;  // (viewWidth, viewHeight)
   uniform int u_maxIterations;
-  uniform float u_zero;    // Always 0.0, prevents compiler optimization
+  uniform int u_refOrbitLen; // Actual length of reference orbit
+  uniform sampler2D u_refOrbit; // Reference orbit texture (Z_n values)
   
-  // ============================================
-  // Double-Single Arithmetic (Emulated Float64)
-  // ============================================
-  
-  // Prevent optimization: compiler can't know u_zero is always 0
-  float noOpt(float x) { return x + u_zero; }
-  
-  vec2 ds(float a) {
-    return vec2(a, 0.0);
+  // Fetch reference orbit value Z_n from texture
+  vec2 getRefZ(int n) {
+    float texCoord = (float(n) + 0.5) / float(u_maxIterations);
+    return texture(u_refOrbit, vec2(texCoord, 0.5)).xy;
   }
   
-  // Quick Two-Sum: assumes |a| >= |b|
-  vec2 quickTwoSum(float a, float b) {
-    float s = noOpt(a + b);
-    float e = noOpt(b - noOpt(s - a));
-    return vec2(s, e);
-  }
-  
-  // Two-Sum: works for any a, b  
-  vec2 twoSum(float a, float b) {
-    float s = noOpt(a + b);
-    float v = noOpt(s - a);
-    float e = noOpt(noOpt(a - noOpt(s - v)) + noOpt(b - v));
-    return vec2(s, e);
-  }
-  
-  // Split a float for Veltkamp/Dekker multiplication
-  vec2 split(float a) {
-    float c = noOpt(4097.0 * a);
-    float aHi = noOpt(c - noOpt(c - a));
-    float aLo = noOpt(a - aHi);
-    return vec2(aHi, aLo);
-  }
-  
-  // Two-Product: exact product using Dekker's algorithm
-  vec2 twoProduct(float a, float b) {
-    float p = noOpt(a * b);
-    vec2 aS = split(a);
-    vec2 bS = split(b);
-    float err = noOpt(noOpt(noOpt(aS.x * bS.x - p) + aS.x * bS.y + aS.y * bS.x) + aS.y * bS.y);
-    return vec2(p, err);
-  }
-  
-  // DS + DS
-  vec2 dsAdd(vec2 a, vec2 b) {
-    vec2 s = twoSum(a.x, b.x);
-    vec2 t = twoSum(a.y, b.y);
-    float sy = noOpt(s.y + t.x);
-    s = quickTwoSum(s.x, sy);
-    sy = noOpt(s.y + t.y);
-    s = quickTwoSum(s.x, sy);
-    return s;
-  }
-  
-  // DS + float
-  vec2 dsAddF(vec2 a, float b) {
-    vec2 s = twoSum(a.x, b);
-    float sy = noOpt(s.y + a.y);
-    s = quickTwoSum(s.x, sy);
-    return s;
-  }
-  
-  // DS * DS
-  vec2 dsMul(vec2 a, vec2 b) {
-    vec2 p = twoProduct(a.x, b.x);
-    float py = noOpt(p.y + a.x * b.y + a.y * b.x);
-    p = quickTwoSum(p.x, py);
-    return p;
-  }
-  
-  // DS * float
-  vec2 dsMulF(vec2 a, float b) {
-    vec2 p = twoProduct(a.x, b);
-    float py = noOpt(p.y + a.y * b);
-    p = quickTwoSum(p.x, py);
-    return p;
-  }
-  
-  // Compare DS > float
-  bool dsGt(vec2 a, float b) {
-    return (a.x > b) || (a.x == b && a.y > 0.0);
-  }
-  
-  // ============================================
-  // Color Palette
-  // ============================================
+  // Cyberpunk color palette
   vec3 getColor(float t) {
     vec3 colors[8];
     colors[0] = vec3(1.0, 0.0, 1.0);
@@ -161,67 +81,57 @@ const fragmentShaderSource = `#version 300 es
     return mix(c1, c2, factor);
   }
   
-  // ============================================
-  // Main
-  // ============================================
   void main() {
-    // Pixel offset from center (-0.5 to 0.5)
+    // Delta c for this pixel (offset from reference point)
     float px = v_uv.x - 0.5;
     float py = v_uv.y - 0.5;
+    vec2 dc = vec2(px * u_viewScale.x, py * u_viewScale.y);
     
-    // Compute c = center + pixelOffset * scale using DS arithmetic
-    vec2 scaleX = vec2(u_scaleHi.x, u_scaleLo.x);
-    vec2 scaleY = vec2(u_scaleHi.y, u_scaleLo.y);
-    vec2 centerX = vec2(u_centerHi.x, u_centerLo.x);
-    vec2 centerY = vec2(u_centerHi.y, u_centerLo.y);
-    
-    vec2 cRe = dsAdd(centerX, dsMulF(scaleX, px));
-    vec2 cIm = dsAdd(centerY, dsMulF(scaleY, py));
-    
-    // Mandelbrot iteration: z = z^2 + c
-    vec2 zRe = ds(0.0);
-    vec2 zIm = ds(0.0);
+    // Perturbation iteration
+    // δz_{n+1} = 2·Z_n·δz_n + δz_n² + δc
+    vec2 dz = vec2(0.0, 0.0); // δz starts at 0
     
     int iteration = 0;
+    int maxIter = min(u_maxIterations, u_refOrbitLen);
     
     for (int i = 0; i < 10000; i++) {
-      if (i >= u_maxIterations) break;
+      if (i >= maxIter) break;
       
-      // z^2 = (zRe + zIm*i)^2 = zRe^2 - zIm^2 + 2*zRe*zIm*i
-      vec2 zRe2 = dsMul(zRe, zRe);
-      vec2 zIm2 = dsMul(zIm, zIm);
-      vec2 zReIm = dsMul(zRe, zIm);
+      vec2 Zn = getRefZ(i);
       
-      // Check escape: |z|^2 > 4
-      vec2 mag2 = dsAdd(zRe2, zIm2);
-      if (dsGt(mag2, 4.0)) break;
+      // Full z = Z + δz
+      vec2 z = Zn + dz;
+      float mag2 = z.x * z.x + z.y * z.y;
       
-      // z_new = z^2 + c
-      // zRe_new = zRe^2 - zIm^2 + cRe
-      // zIm_new = 2*zRe*zIm + cIm
-      vec2 newZRe = dsAdd(dsAdd(zRe2, dsMulF(zIm2, -1.0)), cRe);
-      vec2 newZIm = dsAdd(dsMulF(zReIm, 2.0), cIm);
+      if (mag2 > 4.0) break;
       
-      zRe = newZRe;
-      zIm = newZIm;
+      // δz_new = 2·Z·δz + δz² + δc
+      // Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+      // 2·Z·δz: 2 * (Zr + Zi·i) * (dzr + dzi·i) = 2 * ((Zr·dzr - Zi·dzi) + (Zr·dzi + Zi·dzr)i)
+      vec2 twoZdz = 2.0 * vec2(Zn.x * dz.x - Zn.y * dz.y, Zn.x * dz.y + Zn.y * dz.x);
+      
+      // δz²: (dzr + dzi·i)² = (dzr² - dzi²) + (2·dzr·dzi)i
+      vec2 dz2 = vec2(dz.x * dz.x - dz.y * dz.y, 2.0 * dz.x * dz.y);
+      
+      dz = twoZdz + dz2 + dc;
       
       iteration = i + 1;
     }
     
-    if (iteration >= u_maxIterations) {
+    if (iteration >= maxIter) {
       fragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
-      // Smooth coloring
-      float zRe2 = zRe.x * zRe.x;
-      float zIm2 = zIm.x * zIm.x;
-      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(zRe2 + zIm2)));
+      vec2 Zn = getRefZ(iteration - 1);
+      vec2 z = Zn + dz;
+      float mag2 = z.x * z.x + z.y * z.y;
+      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(mag2)));
       float t = smoothed / float(u_maxIterations);
       fragColor = vec4(getColor(t), 1.0);
     }
   }
 `;
 
-function createShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
+function createShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
   const shader = gl.createShader(type);
   if (!shader) return null;
   
@@ -237,7 +147,7 @@ function createShader(gl: WebGLRenderingContext, type: number, source: string): 
   return shader;
 }
 
-function createProgram(gl: WebGLRenderingContext, vertexShader: WebGLShader, fragmentShader: WebGLShader): WebGLProgram | null {
+function createProgram(gl: WebGL2RenderingContext, vertexShader: WebGLShader, fragmentShader: WebGLShader): WebGLProgram | null {
   const program = gl.createProgram();
   if (!program) return null;
   
@@ -254,11 +164,39 @@ function createProgram(gl: WebGLRenderingContext, vertexShader: WebGLShader, fra
   return program;
 }
 
-// Split a JavaScript float64 into two float32s
-function splitDouble(value: number): [number, number] {
-  const hi = Math.fround(value);
-  const lo = value - hi;
-  return [hi, Math.fround(lo)]; // Also fround the lo part
+// Compute reference orbit at center point using JavaScript's float64
+function computeReferenceOrbit(centerX: number, centerY: number, maxIterations: number): Float32Array {
+  const orbit = new Float32Array(maxIterations * 2); // [re0, im0, re1, im1, ...]
+  
+  let zr = 0;
+  let zi = 0;
+  const cr = centerX;
+  const ci = centerY;
+  
+  for (let i = 0; i < maxIterations; i++) {
+    orbit[i * 2] = zr;
+    orbit[i * 2 + 1] = zi;
+    
+    // z = z² + c
+    const zr2 = zr * zr;
+    const zi2 = zi * zi;
+    
+    if (zr2 + zi2 > 256) { // Extended bailout for smooth reference
+      // Fill rest with last value
+      for (let j = i + 1; j < maxIterations; j++) {
+        orbit[j * 2] = zr;
+        orbit[j * 2 + 1] = zi;
+      }
+      break;
+    }
+    
+    const newZr = zr2 - zi2 + cr;
+    const newZi = 2 * zr * zi + ci;
+    zr = newZr;
+    zi = newZi;
+  }
+  
+  return orbit;
 }
 
 export function useWebGLMandelbrot(
@@ -273,20 +211,21 @@ export function useWebGLMandelbrot(
     zoom: 1,
   });
 
-  const glRef = useRef<WebGLRenderingContext | null>(null);
+  const glRef = useRef<WebGL2RenderingContext | null>(null);
   const programRef = useRef<WebGLProgram | null>(null);
+  const refOrbitTexRef = useRef<WebGLTexture | null>(null);
   const uniformsRef = useRef<{
     resolution: WebGLUniformLocation | null;
-    centerHi: WebGLUniformLocation | null;
-    centerLo: WebGLUniformLocation | null;
-    scaleHi: WebGLUniformLocation | null;
-    scaleLo: WebGLUniformLocation | null;
+    deltaC: WebGLUniformLocation | null;
+    viewScale: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
-    zero: WebGLUniformLocation | null;
+    refOrbitLen: WebGLUniformLocation | null;
+    refOrbit: WebGLUniformLocation | null;
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
   const currentViewRef = useRef<ViewState>(viewState);
+  const lastRefPointRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -295,7 +234,7 @@ export function useWebGLMandelbrot(
     const gl = canvas.getContext('webgl2', { 
       antialias: false,
       preserveDrawingBuffer: true 
-    }) as WebGLRenderingContext | null;
+    });
     if (!gl) {
       console.error('WebGL 2.0 not supported');
       return;
@@ -320,14 +259,22 @@ export function useWebGLMandelbrot(
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
+    // Create texture for reference orbit
+    const refOrbitTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    refOrbitTexRef.current = refOrbitTex;
+
     uniformsRef.current = {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
-      centerHi: gl.getUniformLocation(program, 'u_centerHi'),
-      centerLo: gl.getUniformLocation(program, 'u_centerLo'),
-      scaleHi: gl.getUniformLocation(program, 'u_scaleHi'),
-      scaleLo: gl.getUniformLocation(program, 'u_scaleLo'),
+      deltaC: gl.getUniformLocation(program, 'u_deltaC'),
+      viewScale: gl.getUniformLocation(program, 'u_viewScale'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
-      zero: gl.getUniformLocation(program, 'u_zero'),
+      refOrbitLen: gl.getUniformLocation(program, 'u_refOrbitLen'),
+      refOrbit: gl.getUniformLocation(program, 'u_refOrbit'),
     };
 
     glRef.current = gl;
@@ -337,6 +284,7 @@ export function useWebGLMandelbrot(
       gl.deleteProgram(program);
       gl.deleteShader(vertexShader);
       gl.deleteShader(fragmentShader);
+      gl.deleteTexture(refOrbitTex);
     };
   }, [canvasRef]);
 
@@ -345,30 +293,46 @@ export function useWebGLMandelbrot(
     const program = programRef.current;
     const uniforms = uniformsRef.current;
     const canvas = canvasRef.current;
+    const refOrbitTex = refOrbitTexRef.current;
     
-    if (!gl || !program || !uniforms || !canvas) return;
+    if (!gl || !program || !uniforms || !canvas || !refOrbitTex) return;
+
+    // Compute reference orbit at center (recompute if center changed significantly)
+    const lastRef = lastRefPointRef.current;
+    const needNewRef = !lastRef || 
+      Math.abs(lastRef.x - view.centerX) > 1e-10 || 
+      Math.abs(lastRef.y - view.centerY) > 1e-10;
+    
+    if (needNewRef) {
+      const orbit = computeReferenceOrbit(view.centerX, view.centerY, maxIterations);
+      
+      // Upload orbit to texture (RG32F format for two floats per texel)
+      gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RG32F,
+        maxIterations, 1, 0,
+        gl.RG, gl.FLOAT, orbit
+      );
+      
+      lastRefPointRef.current = { x: view.centerX, y: view.centerY };
+    }
 
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(program);
 
-    // Calculate view dimensions in complex plane
     const aspectRatio = canvas.width / canvas.height;
     const viewWidth = 4 / view.zoom;
     const viewHeight = viewWidth / aspectRatio;
 
-    // Split all values into hi/lo pairs
-    const [centerXHi, centerXLo] = splitDouble(view.centerX);
-    const [centerYHi, centerYLo] = splitDouble(view.centerY);
-    const [scaleXHi, scaleXLo] = splitDouble(viewWidth);
-    const [scaleYHi, scaleYLo] = splitDouble(viewHeight);
-
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-    gl.uniform2f(uniforms.centerHi, centerXHi, centerYHi);
-    gl.uniform2f(uniforms.centerLo, centerXLo, centerYLo);
-    gl.uniform2f(uniforms.scaleHi, scaleXHi, scaleYHi);
-    gl.uniform2f(uniforms.scaleLo, scaleXLo, scaleYLo);
+    gl.uniform2f(uniforms.deltaC, 0, 0); // Reference is at center, so no delta for uniform
+    gl.uniform2f(uniforms.viewScale, viewWidth, viewHeight);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
-    gl.uniform1f(uniforms.zero, 0.0);
+    gl.uniform1i(uniforms.refOrbitLen, maxIterations);
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
+    gl.uniform1i(uniforms.refOrbit, 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }, [canvasRef, maxIterations]);
