@@ -117,7 +117,7 @@ body {
 .loading-indicator {
   position: absolute;
   top: 20px;
-  right: 20px;
+  right: 70px;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(0, 255, 255, 0.3);
@@ -131,6 +131,7 @@ body {
   gap: 10px;
   z-index: 100;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.2s ease;
 }
 
