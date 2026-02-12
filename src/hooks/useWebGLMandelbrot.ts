@@ -29,8 +29,7 @@ const fragmentShaderSource = `#version 300 es
   out vec4 fragColor;
   
   uniform vec2 u_resolution;
-  uniform vec2 u_center;      // View center
-  uniform vec2 u_refPoint;    // Reference point (may differ from center)
+  uniform vec2 u_refOffset;   // refPoint - center (computed in float64 on CPU)
   uniform vec2 u_viewScale;   // (viewWidth, viewHeight)
   uniform int u_maxIterations;
   uniform int u_refOrbitLen;  // Actual length of reference orbit
@@ -83,13 +82,16 @@ const fragmentShaderSource = `#version 300 es
   }
   
   void main() {
-    // This pixel's c value
+    // Pixel offset from view center
     float px = v_uv.x - 0.5;
     float py = v_uv.y - 0.5;
-    vec2 pixelC = u_center + vec2(px * u_viewScale.x, py * u_viewScale.y);
+    vec2 pixelOffset = vec2(px * u_viewScale.x, py * u_viewScale.y);
     
-    // Delta c = pixel's c - reference point
-    vec2 dc = pixelC - u_refPoint;
+    // Delta c = (pixel's c) - refPoint
+    //         = (center + pixelOffset) - refPoint
+    //         = pixelOffset - (refPoint - center)
+    //         = pixelOffset - u_refOffset
+    vec2 dc = pixelOffset - u_refOffset;
     
     // Perturbation iteration
     vec2 dz = vec2(0.0, 0.0);
@@ -132,10 +134,8 @@ const fragmentShaderSource = `#version 300 es
     }
     
     // Phase 2: Direct computation if needed (when reference orbit ran out)
+    // Note: We use dc as approximation for c offset since we don't have absolute coords
     if (useDirectCompute && !escaped) {
-      // Continue with direct iteration using current z value and actual c
-      vec2 c = pixelC;
-      
       for (int i = iteration; i < 10000; i++) {
         if (i >= u_maxIterations) break;
         
@@ -145,10 +145,12 @@ const fragmentShaderSource = `#version 300 es
           break;
         }
         
-        // z = z² + c
+        // z = z² + c (using z + dc as approximation since we're continuing from perturbation)
         float zr2 = z.x * z.x;
         float zi2 = z.y * z.y;
-        z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
+        float newZr = zr2 - zi2 + dc.x;
+        float newZi = 2.0 * z.x * z.y + dc.y;
+        z = vec2(newZr, newZi);
         
         iteration = i + 1;
       }
@@ -323,8 +325,7 @@ export function useWebGLMandelbrot(
   const refOrbitTexRef = useRef<WebGLTexture | null>(null);
   const uniformsRef = useRef<{
     resolution: WebGLUniformLocation | null;
-    center: WebGLUniformLocation | null;
-    refPoint: WebGLUniformLocation | null;
+    refOffset: WebGLUniformLocation | null;
     viewScale: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
     refOrbitLen: WebGLUniformLocation | null;
@@ -386,8 +387,7 @@ export function useWebGLMandelbrot(
 
     uniformsRef.current = {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
-      center: gl.getUniformLocation(program, 'u_center'),
-      refPoint: gl.getUniformLocation(program, 'u_refPoint'),
+      refOffset: gl.getUniformLocation(program, 'u_refOffset'),
       viewScale: gl.getUniformLocation(program, 'u_viewScale'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
       refOrbitLen: gl.getUniformLocation(program, 'u_refOrbitLen'),
@@ -420,9 +420,11 @@ export function useWebGLMandelbrot(
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.useProgram(program);
       
+      const refOffsetX = bestRef.x - view.centerX;
+      const refOffsetY = bestRef.y - view.centerY;
+      
       gl.uniform2f(uniformsRef.current!.resolution, canvas.width, canvas.height);
-      gl.uniform2f(uniformsRef.current!.center, view.centerX, view.centerY);
-      gl.uniform2f(uniformsRef.current!.refPoint, bestRef.x, bestRef.y);
+      gl.uniform2f(uniformsRef.current!.refOffset, refOffsetX, refOffsetY);
       gl.uniform2f(uniformsRef.current!.viewScale, viewWidth, viewHeight);
       gl.uniform1i(uniformsRef.current!.maxIterations, maxIterations);
       gl.uniform1i(uniformsRef.current!.refOrbitLen, orbit.escapeIter);
@@ -486,9 +488,12 @@ export function useWebGLMandelbrot(
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(program);
 
+    // Compute refOffset = refPoint - center (in float64, then pass to shader)
+    const refOffsetX = refX - view.centerX;
+    const refOffsetY = refY - view.centerY;
+    
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-    gl.uniform2f(uniforms.center, view.centerX, view.centerY);
-    gl.uniform2f(uniforms.refPoint, refX, refY);
+    gl.uniform2f(uniforms.refOffset, refOffsetX, refOffsetY);
     gl.uniform2f(uniforms.viewScale, viewWidth, viewHeight);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
     gl.uniform1i(uniforms.refOrbitLen, refOrbitLen);
