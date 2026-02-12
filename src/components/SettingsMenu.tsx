@@ -51,7 +51,11 @@ export function SettingsMenu() {
     <div className="settings-menu" ref={menuRef}>
       <button 
         className={`settings-toggle ${isOpen ? 'open' : ''}`}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
         aria-label="Settings"
       >
         ⚙
@@ -61,7 +65,11 @@ export function SettingsMenu() {
         <div className="settings-dropdown">
           <button 
             className={`settings-item ${copyState}`}
-            onClick={handleCopyLink}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCopyLink();
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
             <span className="settings-icon">
               {copyState === 'success' ? '✓' : copyState === 'error' ? '✗' : '🔗'}
