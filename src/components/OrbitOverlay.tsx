@@ -28,7 +28,6 @@ function computeOrbit(
   
   let zr: number, zi: number, cr: number, ci: number;
   
-  // Set up initial values based on fractal type
   if (fractalSet.type === 'julia') {
     zr = cx;
     zi = cy;
@@ -41,7 +40,6 @@ function computeOrbit(
     ci = cy;
   }
   
-  // Add starting point
   orbit.push({ zr, zi, escaped: false, iteration: 0 });
   
   for (let i = 0; i < maxIterations; i++) {
@@ -81,8 +79,7 @@ function computeOrbit(
     
     orbit.push({ zr, zi, escaped: false, iteration: i + 1 });
     
-    // Stop if we've clearly escaped
-    if (zr * zr + zi * zi > 1000) {
+    if (zr * zr + zi * zi > 100) {
       orbit[orbit.length - 1].escaped = true;
       break;
     }
@@ -91,28 +88,15 @@ function computeOrbit(
   return orbit;
 }
 
+const INSET_SIZE = 160;
+const INSET_PADDING = 12;
+
 export function OrbitOverlay({ centerX, centerY, zoom, fractalSet, containerRef }: OrbitOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const animationRef = useRef<number | null>(null);
   const orbitIndexRef = useRef(0);
   const orbitRef = useRef<{ zr: number; zi: number; escaped: boolean; iteration: number }[]>([]);
-  
-  // Convert complex coordinate to screen position
-  const complexToScreen = useCallback((zr: number, zi: number): { x: number; y: number } | null => {
-    const container = containerRef.current;
-    if (!container) return null;
-    
-    const rect = container.getBoundingClientRect();
-    const aspectRatio = rect.width / rect.height;
-    const viewWidth = 4 / zoom;
-    const viewHeight = viewWidth / aspectRatio;
-    
-    const x = ((zr - centerX) / viewWidth + 0.5) * rect.width;
-    const y = (0.5 - (zi - centerY) / viewHeight) * rect.height;
-    
-    return { x, y };
-  }, [centerX, centerY, zoom, containerRef]);
   
   // Convert screen position to complex coordinate
   const screenToComplex = useCallback((screenX: number, screenY: number): { cr: number; ci: number } => {
@@ -155,7 +139,7 @@ export function OrbitOverlay({ centerX, centerY, zoom, fractalSet, containerRef 
     };
   }, [containerRef]);
   
-  // Compute and animate orbit
+  // Compute and animate orbit in inset window
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -164,17 +148,13 @@ export function OrbitOverlay({ centerX, centerY, zoom, fractalSet, containerRef 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // Update canvas size
-    const rect = container.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
+    canvas.width = INSET_SIZE * dpr;
+    canvas.height = INSET_SIZE * dpr;
     ctx.scale(dpr, dpr);
     
     if (!mousePos) {
-      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.clearRect(0, 0, INSET_SIZE, INSET_SIZE);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
@@ -184,110 +164,149 @@ export function OrbitOverlay({ centerX, centerY, zoom, fractalSet, containerRef 
     
     // Compute orbit for current mouse position
     const { cr, ci } = screenToComplex(mousePos.x, mousePos.y);
-    const orbit = computeOrbit(cr, ci, fractalSet, 150);
+    const orbit = computeOrbit(cr, ci, fractalSet, 100);
     orbitRef.current = orbit;
     orbitIndexRef.current = 0;
     
+    // Calculate bounds to fit orbit in view
+    const getBounds = () => {
+      let minR = -2.5, maxR = 1.5, minI = -2, maxI = 2;
+      
+      // Include c point
+      minR = Math.min(minR, cr - 0.5);
+      maxR = Math.max(maxR, cr + 0.5);
+      minI = Math.min(minI, ci - 0.5);
+      maxI = Math.max(maxI, ci + 0.5);
+      
+      // Include orbit points (clamped)
+      for (const p of orbit) {
+        if (Math.abs(p.zr) < 10 && Math.abs(p.zi) < 10) {
+          minR = Math.min(minR, p.zr - 0.2);
+          maxR = Math.max(maxR, p.zr + 0.2);
+          minI = Math.min(minI, p.zi - 0.2);
+          maxI = Math.max(maxI, p.zi + 0.2);
+        }
+      }
+      
+      // Make square
+      const rangeR = maxR - minR;
+      const rangeI = maxI - minI;
+      const range = Math.max(rangeR, rangeI);
+      const centerR = (minR + maxR) / 2;
+      const centerI = (minI + maxI) / 2;
+      
+      return {
+        minR: centerR - range / 2,
+        maxR: centerR + range / 2,
+        minI: centerI - range / 2,
+        maxI: centerI + range / 2,
+      };
+    };
+    
+    const bounds = getBounds();
+    
+    // Convert complex to inset screen coords
+    const toScreen = (zr: number, zi: number) => {
+      const x = ((zr - bounds.minR) / (bounds.maxR - bounds.minR)) * INSET_SIZE;
+      const y = ((bounds.maxI - zi) / (bounds.maxI - bounds.minI)) * INSET_SIZE;
+      return { x, y };
+    };
+    
     // Animation loop
     const animate = () => {
-      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.clearRect(0, 0, INSET_SIZE, INSET_SIZE);
+      
+      // Draw background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.fillRect(0, 0, INSET_SIZE, INSET_SIZE);
+      
+      // Draw escape circle (|z| = 2)
+      const center = toScreen(0, 0);
+      const edge = toScreen(2, 0);
+      const radius = edge.x - center.x;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // Draw axes
+      const origin = toScreen(0, 0);
+      ctx.beginPath();
+      ctx.moveTo(0, origin.y);
+      ctx.lineTo(INSET_SIZE, origin.y);
+      ctx.moveTo(origin.x, 0);
+      ctx.lineTo(origin.x, INSET_SIZE);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
       
       const orbit = orbitRef.current;
       const maxIndex = Math.min(orbitIndexRef.current + 1, orbit.length);
       
-      if (maxIndex < 2) {
-        orbitIndexRef.current++;
-        animationRef.current = requestAnimationFrame(animate);
-        return;
-      }
-      
       // Draw orbit path
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.lineWidth = 1.5;
-      
-      let firstPoint = true;
-      for (let i = 0; i < maxIndex; i++) {
-        const point = orbit[i];
-        const screenPos = complexToScreen(point.zr, point.zi);
-        if (!screenPos) continue;
+      if (maxIndex >= 2) {
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(100, 200, 255, 0.7)';
+        ctx.lineWidth = 1.5;
         
-        // Skip points that are way off screen
-        if (screenPos.x < -500 || screenPos.x > rect.width + 500 ||
-            screenPos.y < -500 || screenPos.y > rect.height + 500) {
-          firstPoint = true;
-          continue;
-        }
+        const first = toScreen(orbit[0].zr, orbit[0].zi);
+        ctx.moveTo(first.x, first.y);
         
-        if (firstPoint) {
-          ctx.moveTo(screenPos.x, screenPos.y);
-          firstPoint = false;
-        } else {
-          ctx.lineTo(screenPos.x, screenPos.y);
+        for (let i = 1; i < maxIndex; i++) {
+          const point = orbit[i];
+          const pos = toScreen(point.zr, point.zi);
+          ctx.lineTo(pos.x, pos.y);
         }
+        ctx.stroke();
       }
-      ctx.stroke();
       
       // Draw orbit points
       for (let i = 0; i < maxIndex; i++) {
         const point = orbit[i];
-        const screenPos = complexToScreen(point.zr, point.zi);
-        if (!screenPos) continue;
+        const pos = toScreen(point.zr, point.zi);
         
-        if (screenPos.x < -50 || screenPos.x > rect.width + 50 ||
-            screenPos.y < -50 || screenPos.y > rect.height + 50) {
-          continue;
-        }
-        
-        const alpha = 0.3 + (i / maxIndex) * 0.7;
-        const size = i === maxIndex - 1 ? 6 : 4;
+        const alpha = 0.4 + (i / Math.max(maxIndex, 1)) * 0.6;
+        const size = i === maxIndex - 1 ? 5 : 3;
         
         ctx.beginPath();
-        ctx.arc(screenPos.x, screenPos.y, size, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
         
         if (i === 0) {
-          // Starting point - cyan
           ctx.fillStyle = `rgba(0, 255, 255, ${alpha})`;
         } else if (point.escaped) {
-          // Escaped - red/orange
           ctx.fillStyle = `rgba(255, 100, 50, ${alpha})`;
         } else {
-          // In set - white/blue
           ctx.fillStyle = `rgba(100, 200, 255, ${alpha})`;
         }
         ctx.fill();
         
-        // Highlight the latest point
         if (i === maxIndex - 1) {
           ctx.strokeStyle = 'white';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
       }
       
-      // Draw c point (the mouse position / starting c value)
-      const cScreen = complexToScreen(cr, ci);
-      if (cScreen && cScreen.x >= 0 && cScreen.x <= rect.width && cScreen.y >= 0 && cScreen.y <= rect.height) {
-        ctx.beginPath();
-        ctx.arc(cScreen.x, cScreen.y, 8, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        
-        // Cross in center
-        ctx.beginPath();
-        ctx.moveTo(cScreen.x - 4, cScreen.y);
-        ctx.lineTo(cScreen.x + 4, cScreen.y);
-        ctx.moveTo(cScreen.x, cScreen.y - 4);
-        ctx.lineTo(cScreen.x, cScreen.y + 4);
-        ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
+      // Draw c point (yellow)
+      const cPos = toScreen(cr, ci);
+      ctx.beginPath();
+      ctx.arc(cPos.x, cPos.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 220, 0, 0.9)';
+      ctx.fill();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
       
-      // Continue animation if not complete
+      // Label
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText(`c = ${cr.toFixed(3)} + ${ci.toFixed(3)}i`, 6, 14);
+      ctx.fillText(`iter: ${maxIndex - 1}`, 6, 26);
+      
+      // Continue animation
       if (orbitIndexRef.current < orbit.length - 1) {
-        orbitIndexRef.current += 2; // Speed up animation
+        orbitIndexRef.current += 1;
         animationRef.current = requestAnimationFrame(animate);
       }
     };
@@ -299,20 +318,24 @@ export function OrbitOverlay({ centerX, centerY, zoom, fractalSet, containerRef 
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [mousePos, centerX, centerY, zoom, fractalSet, complexToScreen, screenToComplex, containerRef]);
+  }, [mousePos, centerX, centerY, zoom, fractalSet, screenToComplex, containerRef]);
+  
+  if (!mousePos) return null;
   
   return (
     <canvas
       ref={canvasRef}
-      className="orbit-overlay"
+      className="orbit-inset"
       style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
+        bottom: INSET_PADDING,
+        right: INSET_PADDING,
+        width: INSET_SIZE,
+        height: INSET_SIZE,
+        borderRadius: 8,
+        border: '1px solid rgba(255, 255, 255, 0.2)',
         pointerEvents: 'none',
-        zIndex: 50,
+        zIndex: 150,
       }}
     />
   );
