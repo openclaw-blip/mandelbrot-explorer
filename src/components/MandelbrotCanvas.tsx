@@ -4,6 +4,7 @@ import { InfoOverlay } from './InfoOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
 import { Minimap } from './Minimap';
+import { OrbitOverlay } from './OrbitOverlay';
 import { ColorTheme, colorThemes, defaultTheme, getThemeById } from '../colorThemes';
 import { juliaPresets, multibrotPresets, fractalSetFromUrlParams, fractalSetToUrlParams } from '../juliaSets';
 
@@ -372,6 +373,13 @@ export function MandelbrotCanvas() {
         onContextMenu={handleContextMenu}
       >
         <canvas ref={canvasRef} className="mandelbrot-canvas" />
+        <OrbitOverlay
+          centerX={viewState.centerX}
+          centerY={viewState.centerY}
+          zoom={viewState.zoom}
+          fractalSet={fractalSet}
+          containerRef={containerRef}
+        />
       </div>
       <Minimap
         centerX={viewState.centerX}
