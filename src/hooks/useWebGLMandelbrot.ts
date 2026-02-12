@@ -21,20 +21,51 @@ const vertexShaderSource = `
   }
 `;
 
-// Fragment shader - computes Mandelbrot set per pixel on GPU
+// Fragment shader with emulated double precision for deep zooms
 const fragmentShaderSource = `
   precision highp float;
   
   varying vec2 v_uv;
   
   uniform vec2 u_resolution;
-  uniform vec2 u_center;
+  uniform vec2 u_centerHi;  // High bits of center
+  uniform vec2 u_centerLo;  // Low bits of center
   uniform float u_zoom;
   uniform int u_maxIterations;
   
+  // Double-float operations for extended precision
+  // A double is represented as (hi, lo) where value = hi + lo
+  
+  // Split a float into high and low parts
+  vec2 ds_set(float a) {
+    return vec2(a, 0.0);
+  }
+  
+  // Add two double-singles
+  vec2 ds_add(vec2 a, vec2 b) {
+    float t1 = a.x + b.x;
+    float e = t1 - a.x;
+    float t2 = ((b.x - e) + (a.x - (t1 - e))) + a.y + b.y;
+    float hi = t1 + t2;
+    float lo = t2 - (hi - t1);
+    return vec2(hi, lo);
+  }
+  
+  // Multiply two double-singles
+  vec2 ds_mul(vec2 a, vec2 b) {
+    float hi = a.x * b.x;
+    float lo = fma(a.x, b.x, -hi) + a.x * b.y + a.y * b.x;
+    float s = hi + lo;
+    return vec2(s, lo - (s - hi));
+  }
+  
+  // Compare: returns true if a > b
+  bool ds_gt(vec2 a, float b) {
+    return a.x > b || (a.x == b && a.y > 0.0);
+  }
+  
   // Cyberpunk color palette
   vec3 getColor(float t) {
-    // Hot pink -> Cyan -> Purple -> Blue cycle
     vec3 colors[8];
     colors[0] = vec3(1.0, 0.0, 1.0);      // Hot pink
     colors[1] = vec3(0.0, 1.0, 1.0);      // Cyan
@@ -45,17 +76,14 @@ const fragmentShaderSource = `
     colors[6] = vec3(0.784, 0.0, 1.0);    // Light purple
     colors[7] = vec3(0.0, 0.588, 1.0);    // Sky blue
     
-    float scaledT = t * 4.0; // Cycle through palette faster
+    float scaledT = t * 4.0;
     int idx = int(mod(scaledT, 8.0));
     int nextIdx = int(mod(scaledT + 1.0, 8.0));
     float fract_t = fract(scaledT);
-    
-    // Cosine interpolation for smoother gradients
     float factor = (1.0 - cos(fract_t * 3.14159)) / 2.0;
     
     vec3 c1, c2;
     
-    // Unrolled for WebGL 1.0 compatibility (no dynamic indexing)
     if (idx == 0) c1 = colors[0];
     else if (idx == 1) c1 = colors[1];
     else if (idx == 2) c1 = colors[2];
@@ -82,26 +110,41 @@ const fragmentShaderSource = `
     float viewWidth = 4.0 / u_zoom;
     float viewHeight = viewWidth / aspectRatio;
     
-    // Map UV to complex plane
-    float real = u_center.x + (v_uv.x - 0.5) * viewWidth;
-    float imag = u_center.y + (v_uv.y - 0.5) * viewHeight;
+    // Pixel offset from center (in complex plane units)
+    float offsetX = (v_uv.x - 0.5) * viewWidth;
+    float offsetY = (v_uv.y - 0.5) * viewHeight;
     
-    // Mandelbrot iteration
-    float zr = 0.0;
-    float zi = 0.0;
-    float zr2 = 0.0;
-    float zi2 = 0.0;
+    // Add offset to center using double precision
+    vec2 cRe = ds_add(vec2(u_centerHi.x, u_centerLo.x), ds_set(offsetX));
+    vec2 cIm = ds_add(vec2(u_centerHi.y, u_centerLo.y), ds_set(offsetY));
+    
+    // Mandelbrot iteration with double precision
+    vec2 zRe = vec2(0.0, 0.0);
+    vec2 zIm = vec2(0.0, 0.0);
+    vec2 zRe2 = vec2(0.0, 0.0);
+    vec2 zIm2 = vec2(0.0, 0.0);
     
     int iteration = 0;
     
     for (int i = 0; i < 10000; i++) {
       if (i >= u_maxIterations) break;
-      if (zr2 + zi2 > 4.0) break;
       
-      zi = 2.0 * zr * zi + imag;
-      zr = zr2 - zi2 + real;
-      zr2 = zr * zr;
-      zi2 = zi * zi;
+      // Check escape: zRe2 + zIm2 > 4.0
+      vec2 mag2 = ds_add(zRe2, zIm2);
+      if (ds_gt(mag2, 4.0)) break;
+      
+      // zIm = 2 * zRe * zIm + cIm
+      vec2 two = vec2(2.0, 0.0);
+      vec2 zReZIm = ds_mul(zRe, zIm);
+      zIm = ds_add(ds_mul(two, zReZIm), cIm);
+      
+      // zRe = zRe2 - zIm2 + cRe
+      zRe = ds_add(ds_add(zRe2, ds_mul(vec2(-1.0, 0.0), zIm2)), cRe);
+      
+      // Update squares
+      zRe2 = ds_mul(zRe, zRe);
+      zIm2 = ds_mul(zIm, zIm);
+      
       iteration = i + 1;
     }
     
@@ -109,7 +152,8 @@ const fragmentShaderSource = `
       gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
       // Smooth coloring
-      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(zr2 + zi2)));
+      float mag2 = zRe2.x + zIm2.x;
+      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(mag2)));
       float t = smoothed / float(u_maxIterations);
       vec3 color = getColor(t);
       gl_FragColor = vec4(color, 1.0);
@@ -150,11 +194,18 @@ function createProgram(gl: WebGLRenderingContext, vertexShader: WebGLShader, fra
   return program;
 }
 
+// Split a JavaScript number (float64) into two float32s
+function splitDouble(value: number): [number, number] {
+  const hi = Math.fround(value);
+  const lo = value - hi;
+  return [hi, lo];
+}
+
 export function useWebGLMandelbrot(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseWebGLMandelbrotOptions = {}
 ) {
-  const { maxIterations = 500 } = options;
+  const { maxIterations = 1000 } = options;
 
   const [viewState, setViewState] = useState<ViewState>({
     centerX: -0.5,
@@ -166,7 +217,8 @@ export function useWebGLMandelbrot(
   const programRef = useRef<WebGLProgram | null>(null);
   const uniformsRef = useRef<{
     resolution: WebGLUniformLocation | null;
-    center: WebGLUniformLocation | null;
+    centerHi: WebGLUniformLocation | null;
+    centerLo: WebGLUniformLocation | null;
     zoom: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
   } | null>(null);
@@ -215,7 +267,8 @@ export function useWebGLMandelbrot(
     // Get uniform locations
     uniformsRef.current = {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
-      center: gl.getUniformLocation(program, 'u_center'),
+      centerHi: gl.getUniformLocation(program, 'u_centerHi'),
+      centerLo: gl.getUniformLocation(program, 'u_centerLo'),
       zoom: gl.getUniformLocation(program, 'u_zoom'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
     };
@@ -242,9 +295,14 @@ export function useWebGLMandelbrot(
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(program);
 
+    // Split center coordinates into hi/lo parts for extended precision
+    const [centerXHi, centerXLo] = splitDouble(view.centerX);
+    const [centerYHi, centerYLo] = splitDouble(view.centerY);
+
     // Set uniforms
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-    gl.uniform2f(uniforms.center, view.centerX, view.centerY);
+    gl.uniform2f(uniforms.centerHi, centerXHi, centerYHi);
+    gl.uniform2f(uniforms.centerLo, centerXLo, centerYLo);
     gl.uniform1f(uniforms.zoom, view.zoom);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
 
