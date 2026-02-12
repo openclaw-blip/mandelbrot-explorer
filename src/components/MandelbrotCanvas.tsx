@@ -85,11 +85,19 @@ export function MandelbrotCanvas() {
     zoomAt(e.clientX, e.clientY, false);
   }, [zoomAt]);
 
-  // Wheel zoom
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomIn = e.deltaY < 0;
-    zoomAt(e.clientX, e.clientY, zoomIn);
+  // Wheel zoom - use native listener with passive: false to allow preventDefault
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomIn = e.deltaY < 0;
+      zoomAt(e.clientX, e.clientY, zoomIn);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
   }, [zoomAt]);
 
   return (
@@ -102,7 +110,6 @@ export function MandelbrotCanvas() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
         onContextMenu={handleContextMenu}
-        onWheel={handleWheel}
       >
         <canvas ref={canvasRef} className="mandelbrot-canvas" />
       </div>
