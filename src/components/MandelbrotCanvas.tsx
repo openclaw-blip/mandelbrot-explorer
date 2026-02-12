@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useWebGLMandelbrot } from '../hooks/useWebGLMandelbrot';
 import { InfoOverlay } from './InfoOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
@@ -33,7 +33,19 @@ export function MandelbrotCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [theme, setTheme] = useState<ColorTheme>(() => getThemeFromUrl());
+  const [colorOffset, setColorOffset] = useState(0);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Apply color offset to rotate palette
+  const rotatedTheme = useMemo((): ColorTheme => {
+    if (colorOffset === 0) return theme;
+    const len = theme.colors.length;
+    const offset = ((colorOffset % len) + len) % len;
+    return {
+      ...theme,
+      colors: [...theme.colors.slice(offset), ...theme.colors.slice(0, offset)] as ColorTheme['colors'],
+    };
+  }, [theme, colorOffset]);
   
   // Update URL when theme changes
   const handleThemeChange = useCallback((newTheme: ColorTheme) => {
@@ -61,7 +73,7 @@ export function MandelbrotCanvas() {
 
   const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, navigateTo, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
-    theme,
+    theme: rotatedTheme,
   });
 
   // Handle resize
@@ -93,6 +105,10 @@ export function MandelbrotCanvas() {
           ? (currentIndex - 1 + colorThemes.length) % colorThemes.length
           : (currentIndex + 1) % colorThemes.length;
         handleThemeChange(colorThemes[newIndex]);
+        setColorOffset(0); // Reset offset when changing themes
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        setColorOffset(prev => e.key === 'ArrowLeft' ? prev - 1 : prev + 1);
       }
     };
 
@@ -288,7 +304,7 @@ export function MandelbrotCanvas() {
         centerX={viewState.centerX}
         centerY={viewState.centerY}
         zoom={viewState.zoom}
-        theme={theme}
+        theme={rotatedTheme}
         onNavigate={setCenter}
       />
       <InfoOverlay
