@@ -10,7 +10,6 @@ interface UseWebGLMandelbrotOptions {
   maxIterations?: number;
 }
 
-// Vertex shader - just draws a fullscreen quad
 const vertexShaderSource = `
   attribute vec2 a_position;
   varying vec2 v_uv;
@@ -21,18 +20,108 @@ const vertexShaderSource = `
   }
 `;
 
-// Fragment shader - simple single precision first to establish baseline
+// Double-single precision Mandelbrot shader
+// Based on: https://blog.cyclemap.link/2011-06-09-glsl-part2-emu/
+// and Knuth's "The Art of Computer Programming"
 const fragmentShaderSource = `
   precision highp float;
   
   varying vec2 v_uv;
   
   uniform vec2 u_resolution;
-  uniform vec2 u_center;
-  uniform float u_zoom;
+  uniform vec2 u_centerHi;
+  uniform vec2 u_centerLo;
+  uniform vec2 u_scaleHi;  // (viewWidth, viewHeight) high bits
+  uniform vec2 u_scaleLo;  // (viewWidth, viewHeight) low bits
   uniform int u_maxIterations;
   
-  // Cyberpunk color palette
+  // ============================================
+  // Double-Single Arithmetic (Emulated Float64)
+  // ============================================
+  // A DS number is stored as vec2(hi, lo) where value ≈ hi + lo
+  // hi contains the high-order bits, lo contains the residual
+  
+  // Create DS from single float
+  vec2 ds(float a) {
+    return vec2(a, 0.0);
+  }
+  
+  // Quick Two-Sum: assumes |a| >= |b|
+  vec2 quickTwoSum(float a, float b) {
+    float s = a + b;
+    float e = b - (s - a);
+    return vec2(s, e);
+  }
+  
+  // Two-Sum: works for any a, b
+  vec2 twoSum(float a, float b) {
+    float s = a + b;
+    float v = s - a;
+    float e = (a - (s - v)) + (b - v);
+    return vec2(s, e);
+  }
+  
+  // Split a float into high and low parts for multiplication
+  // Uses Veltkamp splitting with 12-bit split (for 24-bit mantissa)
+  vec2 split(float a) {
+    float c = 4097.0 * a;  // 2^12 + 1
+    float aHi = c - (c - a);
+    float aLo = a - aHi;
+    return vec2(aHi, aLo);
+  }
+  
+  // Two-Product: exact product of two floats
+  vec2 twoProduct(float a, float b) {
+    float p = a * b;
+    vec2 aS = split(a);
+    vec2 bS = split(b);
+    float err = ((aS.x * bS.x - p) + aS.x * bS.y + aS.y * bS.x) + aS.y * bS.y;
+    return vec2(p, err);
+  }
+  
+  // DS + DS
+  vec2 dsAdd(vec2 a, vec2 b) {
+    vec2 s = twoSum(a.x, b.x);
+    vec2 t = twoSum(a.y, b.y);
+    s.y += t.x;
+    s = quickTwoSum(s.x, s.y);
+    s.y += t.y;
+    s = quickTwoSum(s.x, s.y);
+    return s;
+  }
+  
+  // DS + float
+  vec2 dsAddF(vec2 a, float b) {
+    vec2 s = twoSum(a.x, b);
+    s.y += a.y;
+    s = quickTwoSum(s.x, s.y);
+    return s;
+  }
+  
+  // DS * DS
+  vec2 dsMul(vec2 a, vec2 b) {
+    vec2 p = twoProduct(a.x, b.x);
+    p.y += a.x * b.y + a.y * b.x;
+    p = quickTwoSum(p.x, p.y);
+    return p;
+  }
+  
+  // DS * float
+  vec2 dsMulF(vec2 a, float b) {
+    vec2 p = twoProduct(a.x, b);
+    p.y += a.y * b;
+    p = quickTwoSum(p.x, p.y);
+    return p;
+  }
+  
+  // Compare DS > float
+  bool dsGt(vec2 a, float b) {
+    return (a.x > b) || (a.x == b && a.y > 0.0);
+  }
+  
+  // ============================================
+  // Color Palette
+  // ============================================
   vec3 getColor(float t) {
     vec3 colors[8];
     colors[0] = vec3(1.0, 0.0, 1.0);
@@ -51,7 +140,6 @@ const fragmentShaderSource = `
     float factor = (1.0 - cos(fract_t * 3.14159)) / 2.0;
     
     vec3 c1, c2;
-    
     if (idx == 0) c1 = colors[0];
     else if (idx == 1) c1 = colors[1];
     else if (idx == 2) c1 = colors[2];
@@ -73,31 +161,49 @@ const fragmentShaderSource = `
     return mix(c1, c2, factor);
   }
   
+  // ============================================
+  // Main
+  // ============================================
   void main() {
-    // Pure single precision - calculate complex coordinate directly
-    float aspectRatio = u_resolution.x / u_resolution.y;
-    float viewWidth = 4.0 / u_zoom;
-    float viewHeight = viewWidth / aspectRatio;
+    // Pixel offset from center (-0.5 to 0.5)
+    float px = v_uv.x - 0.5;
+    float py = v_uv.y - 0.5;
     
-    float cRe = u_center.x + (v_uv.x - 0.5) * viewWidth;
-    float cIm = u_center.y + (v_uv.y - 0.5) * viewHeight;
+    // Compute c = center + pixelOffset * scale using DS arithmetic
+    vec2 scaleX = vec2(u_scaleHi.x, u_scaleLo.x);
+    vec2 scaleY = vec2(u_scaleHi.y, u_scaleLo.y);
+    vec2 centerX = vec2(u_centerHi.x, u_centerLo.x);
+    vec2 centerY = vec2(u_centerHi.y, u_centerLo.y);
     
-    // Standard Mandelbrot iteration
-    float zr = 0.0;
-    float zi = 0.0;
+    vec2 cRe = dsAdd(centerX, dsMulF(scaleX, px));
+    vec2 cIm = dsAdd(centerY, dsMulF(scaleY, py));
+    
+    // Mandelbrot iteration: z = z^2 + c
+    vec2 zRe = ds(0.0);
+    vec2 zIm = ds(0.0);
     
     int iteration = 0;
     
     for (int i = 0; i < 10000; i++) {
       if (i >= u_maxIterations) break;
       
-      float zr2 = zr * zr;
-      float zi2 = zi * zi;
+      // z^2 = (zRe + zIm*i)^2 = zRe^2 - zIm^2 + 2*zRe*zIm*i
+      vec2 zRe2 = dsMul(zRe, zRe);
+      vec2 zIm2 = dsMul(zIm, zIm);
+      vec2 zReIm = dsMul(zRe, zIm);
       
-      if (zr2 + zi2 > 4.0) break;
+      // Check escape: |z|^2 > 4
+      vec2 mag2 = dsAdd(zRe2, zIm2);
+      if (dsGt(mag2, 4.0)) break;
       
-      zi = 2.0 * zr * zi + cIm;
-      zr = zr2 - zi2 + cRe;
+      // z_new = z^2 + c
+      // zRe_new = zRe^2 - zIm^2 + cRe
+      // zIm_new = 2*zRe*zIm + cIm
+      vec2 newZRe = dsAdd(dsAdd(zRe2, dsMulF(zIm2, -1.0)), cRe);
+      vec2 newZIm = dsAdd(dsMulF(zReIm, 2.0), cIm);
+      
+      zRe = newZRe;
+      zIm = newZIm;
       
       iteration = i + 1;
     }
@@ -105,12 +211,12 @@ const fragmentShaderSource = `
     if (iteration >= u_maxIterations) {
       gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
-      float zr2 = zr * zr;
-      float zi2 = zi * zi;
-      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(zr2 + zi2)));
+      // Smooth coloring
+      float zRe2 = zRe.x * zRe.x;
+      float zIm2 = zIm.x * zIm.x;
+      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(zRe2 + zIm2)));
       float t = smoothed / float(u_maxIterations);
-      vec3 color = getColor(t);
-      gl_FragColor = vec4(color, 1.0);
+      gl_FragColor = vec4(getColor(t), 1.0);
     }
   }
 `;
@@ -148,6 +254,13 @@ function createProgram(gl: WebGLRenderingContext, vertexShader: WebGLShader, fra
   return program;
 }
 
+// Split a JavaScript float64 into two float32s
+function splitDouble(value: number): [number, number] {
+  const hi = Math.fround(value);
+  const lo = value - hi;
+  return [hi, Math.fround(lo)]; // Also fround the lo part
+}
+
 export function useWebGLMandelbrot(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseWebGLMandelbrotOptions = {}
@@ -164,15 +277,16 @@ export function useWebGLMandelbrot(
   const programRef = useRef<WebGLProgram | null>(null);
   const uniformsRef = useRef<{
     resolution: WebGLUniformLocation | null;
-    center: WebGLUniformLocation | null;
-    zoom: WebGLUniformLocation | null;
+    centerHi: WebGLUniformLocation | null;
+    centerLo: WebGLUniformLocation | null;
+    scaleHi: WebGLUniformLocation | null;
+    scaleLo: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
   const currentViewRef = useRef<ViewState>(viewState);
 
-  // Initialize WebGL
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -194,27 +308,23 @@ export function useWebGLMandelbrot(
     const program = createProgram(gl, vertexShader, fragmentShader);
     if (!program) return;
 
-    // Set up geometry (fullscreen quad)
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -1, -1,
-       1, -1,
-      -1,  1,
-      -1,  1,
-       1, -1,
-       1,  1,
+      -1, -1,  1, -1,  -1, 1,
+      -1, 1,   1, -1,   1, 1,
     ]), gl.STATIC_DRAW);
 
     const positionLocation = gl.getAttribLocation(program, 'a_position');
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Get uniform locations
     uniformsRef.current = {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
-      center: gl.getUniformLocation(program, 'u_center'),
-      zoom: gl.getUniformLocation(program, 'u_zoom'),
+      centerHi: gl.getUniformLocation(program, 'u_centerHi'),
+      centerLo: gl.getUniformLocation(program, 'u_centerLo'),
+      scaleHi: gl.getUniformLocation(program, 'u_scaleHi'),
+      scaleLo: gl.getUniformLocation(program, 'u_scaleLo'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
     };
 
@@ -228,7 +338,6 @@ export function useWebGLMandelbrot(
     };
   }, [canvasRef]);
 
-  // Render function
   const render = useCallback((view: ViewState) => {
     const gl = glRef.current;
     const program = programRef.current;
@@ -240,17 +349,27 @@ export function useWebGLMandelbrot(
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(program);
 
-    // Set uniforms - pure single precision
+    // Calculate view dimensions in complex plane
+    const aspectRatio = canvas.width / canvas.height;
+    const viewWidth = 4 / view.zoom;
+    const viewHeight = viewWidth / aspectRatio;
+
+    // Split all values into hi/lo pairs
+    const [centerXHi, centerXLo] = splitDouble(view.centerX);
+    const [centerYHi, centerYLo] = splitDouble(view.centerY);
+    const [scaleXHi, scaleXLo] = splitDouble(viewWidth);
+    const [scaleYHi, scaleYLo] = splitDouble(viewHeight);
+
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-    gl.uniform2f(uniforms.center, view.centerX, view.centerY);
-    gl.uniform1f(uniforms.zoom, view.zoom);
+    gl.uniform2f(uniforms.centerHi, centerXHi, centerYHi);
+    gl.uniform2f(uniforms.centerLo, centerXLo, centerYLo);
+    gl.uniform2f(uniforms.scaleHi, scaleXHi, scaleYHi);
+    gl.uniform2f(uniforms.scaleLo, scaleXLo, scaleYLo);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
 
-    // Draw
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }, [canvasRef, maxIterations]);
 
-  // Animated transition
   const animateTo = useCallback((target: ViewState, duration: number = 300) => {
     const startView = { ...currentViewRef.current };
     const startTime = performance.now();
@@ -258,8 +377,6 @@ export function useWebGLMandelbrot(
     const animate = (time: number) => {
       const elapsed = time - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
-      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       
       const currentView: ViewState = {
@@ -280,11 +397,9 @@ export function useWebGLMandelbrot(
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
-    
     animationFrameRef.current = requestAnimationFrame(animate);
   }, [render]);
 
-  // Zoom at point
   const zoomAt = useCallback((screenX: number, screenY: number, zoomIn: boolean) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -301,7 +416,6 @@ export function useWebGLMandelbrot(
     const viewWidth = 4 / current.zoom;
     const viewHeight = viewWidth / aspectRatio;
     
-    // Convert screen coordinates to complex plane (flip Y for WebGL)
     const dpr = window.devicePixelRatio || 1;
     const realPart = current.centerX + (x * dpr / width - 0.5) * viewWidth;
     const imagPart = current.centerY + (0.5 - y * dpr / height) * viewHeight;
@@ -309,35 +423,26 @@ export function useWebGLMandelbrot(
     const zoomFactor = zoomIn ? 2 : 0.5;
     const newZoom = current.zoom * zoomFactor;
     
-    // Pan towards/away from click point
     const panFactor = zoomIn ? 0.5 : -0.5;
     const newCenterX = current.centerX + (realPart - current.centerX) * panFactor;
     const newCenterY = current.centerY + (imagPart - current.centerY) * panFactor;
     
-    animateTo({
-      centerX: newCenterX,
-      centerY: newCenterY,
-      zoom: newZoom,
-    });
+    animateTo({ centerX: newCenterX, centerY: newCenterY, zoom: newZoom });
   }, [canvasRef, animateTo]);
 
-  // Pan
   const pan = useCallback((deltaX: number, deltaY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
-    const width = canvas.width;
-    const height = canvas.height;
-    const aspectRatio = width / height;
-    
     const current = currentViewRef.current;
+    const aspectRatio = canvas.width / canvas.height;
     const viewWidth = 4 / current.zoom;
     const viewHeight = viewWidth / aspectRatio;
     
     const dpr = window.devicePixelRatio || 1;
     const newView: ViewState = {
-      centerX: current.centerX - (deltaX * dpr / width) * viewWidth,
-      centerY: current.centerY + (deltaY * dpr / height) * viewHeight, // Flip Y
+      centerX: current.centerX - (deltaX * dpr / canvas.width) * viewWidth,
+      centerY: current.centerY + (deltaY * dpr / canvas.height) * viewHeight,
       zoom: current.zoom,
     };
     
@@ -346,23 +451,16 @@ export function useWebGLMandelbrot(
     render(newView);
   }, [canvasRef, render]);
 
-  // Reset view
   const reset = useCallback(() => {
-    animateTo({
-      centerX: -0.5,
-      centerY: 0,
-      zoom: 1,
-    }, 500);
+    animateTo({ centerX: -0.5, centerY: 0, zoom: 1 }, 500);
   }, [animateTo]);
 
-  // Handle resize
   const handleResize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     
