@@ -534,9 +534,8 @@ export function useWebGLMandelbrot(
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        // Animation complete - update reference and URL
+        // Animation complete
         isAnimatingRef.current = false;
-        render(currentView); // Re-render with potentially new reference
         updateUrl(currentView);
       }
     };
