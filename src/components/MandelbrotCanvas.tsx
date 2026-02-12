@@ -110,12 +110,6 @@ export function MandelbrotCanvas() {
     updateScaleInUrl(newScale);
   }, []);
 
-  // Update URL when fractal set changes
-  const handleFractalSetChange = useCallback((newSet: FractalSet) => {
-    setFractalSet(newSet);
-    updateFractalSetInUrl(newSet);
-  }, []);
-
   // Screenshot export
   const handleScreenshot = useCallback(() => {
     const canvas = canvasRef.current;
@@ -140,6 +134,16 @@ export function MandelbrotCanvas() {
     colorScale,
     fractalSet,
   });
+
+  // Update URL when fractal set changes and reset view
+  const handleFractalSetChange = useCallback((newSet: FractalSet) => {
+    setFractalSet(newSet);
+    updateFractalSetInUrl(newSet);
+    // Reset view to show entire set
+    // Mandelbrot: centered at (-0.5, 0), Julia: centered at (0, 0)
+    const centerX = newSet.type === 'mandelbrot' ? -0.5 : 0;
+    navigateTo(centerX, 0, 1);
+  }, [navigateTo]);
 
   // Handle resize
   useEffect(() => {
