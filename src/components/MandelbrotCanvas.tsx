@@ -380,6 +380,7 @@ export function MandelbrotCanvas() {
         centerY={viewState.centerY}
         zoom={viewState.zoom}
         theme={rotatedTheme}
+        fractalSet={fractalSet}
         onNavigate={setCenter}
       />
       <InfoOverlay
