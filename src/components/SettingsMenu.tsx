@@ -1,19 +1,31 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { ColorTheme } from '../colorThemes';
 
 type CopyState = 'idle' | 'success' | 'error';
 
-export function SettingsMenu() {
+interface SettingsMenuProps {
+  themes: ColorTheme[];
+  currentTheme: ColorTheme;
+  onThemeChange: (theme: ColorTheme) => void;
+}
+
+export function SettingsMenu({ themes, currentTheme, onThemeChange }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showThemes, setShowThemes] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click - delay listener to avoid catching the opening click
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setShowThemes(false);
+      return;
+    }
     
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setShowThemes(false);
       }
     };
 
@@ -60,6 +72,21 @@ export function SettingsMenu() {
     setIsOpen(prev => !prev);
   }, []);
 
+  const handleThemeSelect = useCallback((theme: ColorTheme) => {
+    onThemeChange(theme);
+    setShowThemes(false);
+    setIsOpen(false);
+  }, [onThemeChange]);
+
+  // Generate a preview gradient for a theme
+  const getThemePreview = (theme: ColorTheme) => {
+    const stops = theme.colors.slice(0, 4).map((c, i) => {
+      const percent = (i / 3) * 100;
+      return `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}) ${percent}%`;
+    });
+    return `linear-gradient(90deg, ${stops.join(', ')})`;
+  };
+
   return (
     <div className="settings-menu" ref={menuRef}>
       <button 
@@ -92,6 +119,42 @@ export function SettingsMenu() {
               {copyState === 'success' ? 'Copied!' : copyState === 'error' ? 'Failed' : 'Copy link'}
             </span>
           </button>
+          
+          <div className="settings-divider" />
+          
+          <button 
+            className={`settings-item ${showThemes ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowThemes(!showThemes);
+            }}
+          >
+            <span className="settings-icon">🎨</span>
+            <span className="settings-label">Colors</span>
+            <span className="settings-arrow">{showThemes ? '▼' : '▶'}</span>
+          </button>
+          
+          {showThemes && (
+            <div className="theme-list">
+              {themes.map(theme => (
+                <button
+                  key={theme.id}
+                  className={`theme-item ${theme.id === currentTheme.id ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleThemeSelect(theme);
+                  }}
+                >
+                  <span 
+                    className="theme-preview" 
+                    style={{ background: getThemePreview(theme) }}
+                  />
+                  <span className="theme-name">{theme.name}</span>
+                  {theme.id === currentTheme.id && <span className="theme-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

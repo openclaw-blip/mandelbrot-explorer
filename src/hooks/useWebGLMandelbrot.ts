@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ColorTheme, defaultTheme } from '../colorThemes';
 
 interface ViewState {
   centerX: number;
@@ -8,6 +9,7 @@ interface ViewState {
 
 interface UseWebGLMandelbrotOptions {
   maxIterations?: number;
+  theme?: ColorTheme;
 }
 
 const vertexShaderSource = `#version 300 es
@@ -36,24 +38,17 @@ const fragmentShaderSource = `#version 300 es
   uniform int u_refOrbitLen;  // Actual length of reference orbit
   uniform sampler2D u_refOrbit;
   
+  // Color palette uniforms
+  uniform vec3 u_colors[8];
+  
   // Fetch reference orbit value Z_n from texture
   vec2 getRefZ(int n) {
     float texCoord = (float(n) + 0.5) / float(u_maxIterations);
     return texture(u_refOrbit, vec2(texCoord, 0.5)).xy;
   }
   
-  // Cyberpunk color palette
+  // Dynamic color palette
   vec3 getColor(float t) {
-    vec3 colors[8];
-    colors[0] = vec3(1.0, 0.0, 1.0);
-    colors[1] = vec3(0.0, 1.0, 1.0);
-    colors[2] = vec3(0.616, 0.0, 1.0);
-    colors[3] = vec3(0.0, 0.4, 1.0);
-    colors[4] = vec3(1.0, 0.0, 0.5);
-    colors[5] = vec3(0.0, 0.784, 1.0);
-    colors[6] = vec3(0.784, 0.0, 1.0);
-    colors[7] = vec3(0.0, 0.588, 1.0);
-    
     float scaledT = t * 4.0;
     int idx = int(mod(scaledT, 8.0));
     int nextIdx = int(mod(scaledT + 1.0, 8.0));
@@ -61,23 +56,23 @@ const fragmentShaderSource = `#version 300 es
     float factor = (1.0 - cos(fract_t * 3.14159)) / 2.0;
     
     vec3 c1, c2;
-    if (idx == 0) c1 = colors[0];
-    else if (idx == 1) c1 = colors[1];
-    else if (idx == 2) c1 = colors[2];
-    else if (idx == 3) c1 = colors[3];
-    else if (idx == 4) c1 = colors[4];
-    else if (idx == 5) c1 = colors[5];
-    else if (idx == 6) c1 = colors[6];
-    else c1 = colors[7];
+    if (idx == 0) c1 = u_colors[0];
+    else if (idx == 1) c1 = u_colors[1];
+    else if (idx == 2) c1 = u_colors[2];
+    else if (idx == 3) c1 = u_colors[3];
+    else if (idx == 4) c1 = u_colors[4];
+    else if (idx == 5) c1 = u_colors[5];
+    else if (idx == 6) c1 = u_colors[6];
+    else c1 = u_colors[7];
     
-    if (nextIdx == 0) c2 = colors[0];
-    else if (nextIdx == 1) c2 = colors[1];
-    else if (nextIdx == 2) c2 = colors[2];
-    else if (nextIdx == 3) c2 = colors[3];
-    else if (nextIdx == 4) c2 = colors[4];
-    else if (nextIdx == 5) c2 = colors[5];
-    else if (nextIdx == 6) c2 = colors[6];
-    else c2 = colors[7];
+    if (nextIdx == 0) c2 = u_colors[0];
+    else if (nextIdx == 1) c2 = u_colors[1];
+    else if (nextIdx == 2) c2 = u_colors[2];
+    else if (nextIdx == 3) c2 = u_colors[3];
+    else if (nextIdx == 4) c2 = u_colors[4];
+    else if (nextIdx == 5) c2 = u_colors[5];
+    else if (nextIdx == 6) c2 = u_colors[6];
+    else c2 = u_colors[7];
     
     return mix(c1, c2, factor);
   }
@@ -312,7 +307,7 @@ export function useWebGLMandelbrot(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseWebGLMandelbrotOptions = {}
 ) {
-  const { maxIterations = 1000 } = options;
+  const { maxIterations = 1000, theme = defaultTheme } = options;
 
   // Initialize from URL or defaults
   const [viewState, setViewState] = useState<ViewState>(() => {
@@ -331,6 +326,7 @@ export function useWebGLMandelbrot(
     maxIterations: WebGLUniformLocation | null;
     refOrbitLen: WebGLUniformLocation | null;
     refOrbit: WebGLUniformLocation | null;
+    colors: WebGLUniformLocation | null;
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
@@ -396,6 +392,7 @@ export function useWebGLMandelbrot(
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
       refOrbitLen: gl.getUniformLocation(program, 'u_refOrbitLen'),
       refOrbit: gl.getUniformLocation(program, 'u_refOrbit'),
+      colors: gl.getUniformLocation(program, 'u_colors'),
     };
 
     glRef.current = gl;
@@ -433,6 +430,11 @@ export function useWebGLMandelbrot(
       gl.uniform2f(uniformsRef.current!.viewScale, viewWidth, viewHeight);
       gl.uniform1i(uniformsRef.current!.maxIterations, maxIterations);
       gl.uniform1i(uniformsRef.current!.refOrbitLen, orbit.escapeIter);
+      
+      // Set color palette
+      const colorData = new Float32Array(theme.colors.flat());
+      gl.uniform3fv(uniformsRef.current!.colors, colorData);
+      
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
       gl.uniform1i(uniformsRef.current!.refOrbit, 0);
@@ -505,12 +507,16 @@ export function useWebGLMandelbrot(
     gl.uniform1i(uniforms.maxIterations, maxIterations);
     gl.uniform1i(uniforms.refOrbitLen, refOrbitLen);
     
+    // Set color palette
+    const colorData = new Float32Array(theme.colors.flat());
+    gl.uniform3fv(uniforms.colors, colorData);
+    
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
     gl.uniform1i(uniforms.refOrbit, 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }, [canvasRef, maxIterations]);
+  }, [canvasRef, maxIterations, theme]);
 
   const animateTo = useCallback((target: ViewState, duration: number = 300) => {
     const startView = { ...currentViewRef.current };

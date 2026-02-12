@@ -4,15 +4,18 @@ import { InfoOverlay } from './InfoOverlay';
 import { HelpOverlay } from './HelpOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
+import { ColorTheme, colorThemes, defaultTheme } from '../colorThemes';
 
 export function MandelbrotCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [theme, setTheme] = useState<ColorTheme>(defaultTheme);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
+    theme,
   });
 
   // Handle resize
@@ -127,7 +130,11 @@ export function MandelbrotCanvas() {
         centerY={viewState.centerY}
         zoom={viewState.zoom}
       />
-      <SettingsMenu />
+      <SettingsMenu 
+        themes={colorThemes}
+        currentTheme={theme}
+        onThemeChange={setTheme}
+      />
       <HelpOverlay />
       <LoadingIndicator visible={isComputing} />
     </>
