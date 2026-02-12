@@ -7,6 +7,7 @@ interface SettingsMenuProps {
   themes: ColorTheme[];
   currentTheme: ColorTheme;
   onThemeChange: (theme: ColorTheme) => void;
+  onScreenshot: () => void;
 }
 
 function HelpModal({ onClose }: { onClose: () => void }) {
@@ -53,7 +54,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SettingsMenu({ themes, currentTheme, onThemeChange }: SettingsMenuProps) {
+export function SettingsMenu({ themes, currentTheme, onThemeChange, onScreenshot }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -163,6 +164,18 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange }: SettingsMe
             <span className="settings-label">
               {copyState === 'success' ? 'Copied!' : copyState === 'error' ? 'Failed' : 'Copy link'}
             </span>
+          </button>
+          
+          <button 
+            className="settings-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onScreenshot();
+              setIsOpen(false);
+            }}
+          >
+            <span className="settings-icon">📷</span>
+            <span className="settings-label">Save image</span>
           </button>
           
           <div className="settings-divider" />

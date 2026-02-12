@@ -41,6 +41,24 @@ export function MandelbrotCanvas() {
     updateThemeInUrl(newTheme.id);
   }, []);
 
+  // Screenshot export
+  const handleScreenshot = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mandelbrot-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }, []);
+
   const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
     theme,
@@ -136,9 +154,105 @@ export function MandelbrotCanvas() {
       zoomAtInstant(e.clientX, e.clientY, zoomFactor);
     };
 
+    // Touch handling
+    let touchStartDist = 0;
+    let touchStartZoom = 1;
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+    let isTouchDragging = false;
+    let lastTapTime = 0;
+
+    const getTouchDistance = (t1: Touch, t2: Touch) => {
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const getTouchCenter = (t1: Touch, t2: Touch) => ({
+      x: (t1.clientX + t2.clientX) / 2,
+      y: (t1.clientY + t2.clientY) / 2,
+    });
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+        isTouchDragging = false;
+        
+        // Double tap detection
+        const now = Date.now();
+        if (now - lastTapTime < 300) {
+          e.preventDefault();
+          zoomAt(touch.clientX, touch.clientY, true);
+          lastTapTime = 0;
+        } else {
+          lastTapTime = now;
+        }
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
+        touchStartZoom = viewState.zoom;
+        startDrag();
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1 && !touchStartDist) {
+        const touch = e.touches[0];
+        const dx = touch.clientX - lastTouchX;
+        const dy = touch.clientY - lastTouchY;
+        
+        if (!isTouchDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+          isTouchDragging = true;
+          startDrag();
+        }
+        
+        if (isTouchDragging) {
+          e.preventDefault();
+          pan(dx, dy);
+          lastTouchX = touch.clientX;
+          lastTouchY = touch.clientY;
+        }
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        const dist = getTouchDistance(e.touches[0], e.touches[1]);
+        const center = getTouchCenter(e.touches[0], e.touches[1]);
+        const scale = dist / touchStartDist;
+        const newZoom = touchStartZoom * scale;
+        const zoomFactor = newZoom / viewState.zoom;
+        zoomAtInstant(center.x, center.y, zoomFactor);
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        if (isTouchDragging) {
+          stopDrag();
+        }
+        isTouchDragging = false;
+        touchStartDist = 0;
+      } else if (e.touches.length === 1) {
+        // Went from 2 fingers to 1
+        touchStartDist = 0;
+        const touch = e.touches[0];
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+        stopDrag();
+      }
+    };
+
     container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [zoomAtInstant]);
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [zoomAtInstant, zoomAt, pan, startDrag, stopDrag, viewState.zoom]);
 
   return (
     <>
@@ -169,6 +283,7 @@ export function MandelbrotCanvas() {
         themes={colorThemes}
         currentTheme={theme}
         onThemeChange={handleThemeChange}
+        onScreenshot={handleScreenshot}
       />
       <LoadingIndicator visible={isComputing} />
     </>
