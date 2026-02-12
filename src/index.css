@@ -153,6 +153,54 @@ body {
   }
 }
 
+.share-button {
+  position: absolute;
+  bottom: 20px;
+  right: 160px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+  color: #00ffff;
+  cursor: pointer;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.share-button:hover {
+  opacity: 1;
+  border-color: rgba(0, 255, 255, 0.6);
+}
+
+.share-button.success {
+  opacity: 1;
+  color: #00ff88;
+  border-color: rgba(0, 255, 136, 0.6);
+}
+
+.share-button.error {
+  opacity: 1;
+  color: #ff4444;
+  border-color: rgba(255, 68, 68, 0.6);
+}
+
+.share-icon {
+  font-size: 16px;
+}
+
+.share-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .help-overlay {
   position: absolute;
   bottom: 20px;

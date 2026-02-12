@@ -3,6 +3,7 @@ import { useWebGLMandelbrot } from '../hooks/useWebGLMandelbrot';
 import { InfoOverlay } from './InfoOverlay';
 import { HelpOverlay } from './HelpOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
+import { ShareButton } from './ShareButton';
 
 export function MandelbrotCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,6 +127,7 @@ export function MandelbrotCanvas() {
         centerY={viewState.centerY}
         zoom={viewState.zoom}
       />
+      <ShareButton />
       <HelpOverlay />
       <LoadingIndicator visible={isComputing} />
     </>
