@@ -28,10 +28,8 @@ const fragmentShaderSource = `
   varying vec2 v_uv;
   
   uniform vec2 u_resolution;
-  uniform vec2 u_centerHi;
-  uniform vec2 u_centerLo;
-  uniform vec2 u_pixelDeltaHi;
-  uniform vec2 u_pixelDeltaLo;
+  uniform vec2 u_center;
+  uniform float u_zoom;
   uniform int u_maxIterations;
   
   // Cyberpunk color palette
@@ -76,9 +74,13 @@ const fragmentShaderSource = `
   }
   
   void main() {
-    // Reconstruct double-precision coordinates from hi+lo parts
-    float cRe = u_centerHi.x + u_centerLo.x + (v_uv.x - 0.5) * u_resolution.x * (u_pixelDeltaHi.x + u_pixelDeltaLo.x);
-    float cIm = u_centerHi.y + u_centerLo.y + (v_uv.y - 0.5) * u_resolution.y * (u_pixelDeltaHi.y + u_pixelDeltaLo.y);
+    // Pure single precision - calculate complex coordinate directly
+    float aspectRatio = u_resolution.x / u_resolution.y;
+    float viewWidth = 4.0 / u_zoom;
+    float viewHeight = viewWidth / aspectRatio;
+    
+    float cRe = u_center.x + (v_uv.x - 0.5) * viewWidth;
+    float cIm = u_center.y + (v_uv.y - 0.5) * viewHeight;
     
     // Standard Mandelbrot iteration
     float zr = 0.0;
@@ -146,13 +148,6 @@ function createProgram(gl: WebGLRenderingContext, vertexShader: WebGLShader, fra
   return program;
 }
 
-// Split a JavaScript number (float64) into two float32s
-function splitDouble(value: number): [number, number] {
-  const hi = Math.fround(value);
-  const lo = value - hi;
-  return [hi, lo];
-}
-
 export function useWebGLMandelbrot(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseWebGLMandelbrotOptions = {}
@@ -169,10 +164,8 @@ export function useWebGLMandelbrot(
   const programRef = useRef<WebGLProgram | null>(null);
   const uniformsRef = useRef<{
     resolution: WebGLUniformLocation | null;
-    centerHi: WebGLUniformLocation | null;
-    centerLo: WebGLUniformLocation | null;
-    pixelDeltaHi: WebGLUniformLocation | null;
-    pixelDeltaLo: WebGLUniformLocation | null;
+    center: WebGLUniformLocation | null;
+    zoom: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
   } | null>(null);
   
@@ -220,10 +213,8 @@ export function useWebGLMandelbrot(
     // Get uniform locations
     uniformsRef.current = {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
-      centerHi: gl.getUniformLocation(program, 'u_centerHi'),
-      centerLo: gl.getUniformLocation(program, 'u_centerLo'),
-      pixelDeltaHi: gl.getUniformLocation(program, 'u_pixelDeltaHi'),
-      pixelDeltaLo: gl.getUniformLocation(program, 'u_pixelDeltaLo'),
+      center: gl.getUniformLocation(program, 'u_center'),
+      zoom: gl.getUniformLocation(program, 'u_zoom'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
     };
 
@@ -249,26 +240,10 @@ export function useWebGLMandelbrot(
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(program);
 
-    // Split center coordinates into hi/lo parts for extended precision
-    const [centerXHi, centerXLo] = splitDouble(view.centerX);
-    const [centerYHi, centerYLo] = splitDouble(view.centerY);
-    
-    // Calculate per-pixel delta in complex plane (in JavaScript float64)
-    const aspectRatio = canvas.width / canvas.height;
-    const viewWidth = 4 / view.zoom;
-    const viewHeight = viewWidth / aspectRatio;
-    const pixelDeltaX = viewWidth / canvas.width;
-    const pixelDeltaY = viewHeight / canvas.height;
-    
-    const [pixelDeltaXHi, pixelDeltaXLo] = splitDouble(pixelDeltaX);
-    const [pixelDeltaYHi, pixelDeltaYLo] = splitDouble(pixelDeltaY);
-
-    // Set uniforms
+    // Set uniforms - pure single precision
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-    gl.uniform2f(uniforms.centerHi, centerXHi, centerYHi);
-    gl.uniform2f(uniforms.centerLo, centerXLo, centerYLo);
-    gl.uniform2f(uniforms.pixelDeltaHi, pixelDeltaXHi, pixelDeltaYHi);
-    gl.uniform2f(uniforms.pixelDeltaLo, pixelDeltaXLo, pixelDeltaYLo);
+    gl.uniform2f(uniforms.center, view.centerX, view.centerY);
+    gl.uniform1f(uniforms.zoom, view.zoom);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
 
     // Draw
