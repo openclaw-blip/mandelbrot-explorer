@@ -284,6 +284,12 @@ export function useWebGLMandelbrot(
       console.error('WebGL 2.0 not supported');
       return;
     }
+    
+    // Enable float textures
+    const ext = gl.getExtension('EXT_color_buffer_float');
+    if (!ext) {
+      console.warn('EXT_color_buffer_float not available, may affect precision');
+    }
 
     const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
     const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
@@ -324,6 +330,39 @@ export function useWebGLMandelbrot(
 
     glRef.current = gl;
     programRef.current = program;
+    
+    // Trigger initial render on next frame
+    requestAnimationFrame(() => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      
+      // Need to get render function - call it directly here
+      const view = currentViewRef.current;
+      const orbit = computeReferenceOrbit(view.centerX, view.centerY, maxIterations);
+      
+      gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, maxIterations, 1, 0, gl.RG, gl.FLOAT, orbit.data);
+      lastRefPointRef.current = { x: view.centerX, y: view.centerY, escapeIter: orbit.escapeIter };
+      
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(program);
+      
+      const aspectRatio = canvas.width / canvas.height;
+      const viewWidth = 4 / view.zoom;
+      const viewHeight = viewWidth / aspectRatio;
+      
+      gl.uniform2f(uniformsRef.current!.resolution, canvas.width, canvas.height);
+      gl.uniform2f(uniformsRef.current!.deltaC, 0, 0);
+      gl.uniform2f(uniformsRef.current!.viewScale, viewWidth, viewHeight);
+      gl.uniform1i(uniformsRef.current!.maxIterations, maxIterations);
+      gl.uniform1i(uniformsRef.current!.refOrbitLen, orbit.escapeIter);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
+      gl.uniform1i(uniformsRef.current!.refOrbit, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    });
 
     return () => {
       gl.deleteProgram(program);
