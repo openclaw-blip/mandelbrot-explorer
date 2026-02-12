@@ -15,6 +15,15 @@ function getThemeFromUrl(): ColorTheme {
   return themeId ? getThemeById(themeId) : defaultTheme;
 }
 
+// Read scale from URL hash (defaults to log)
+function getScaleFromUrl(): 'log' | 'linear' {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return 'log';
+  const params = new URLSearchParams(hash);
+  const scale = params.get('scale');
+  return scale === 'lin' ? 'linear' : 'log';
+}
+
 // Update theme in URL hash (preserving other params)
 function updateThemeInUrl(themeId: string) {
   const hash = window.location.hash.slice(1);
@@ -28,12 +37,26 @@ function updateThemeInUrl(themeId: string) {
   window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
 }
 
+// Update scale in URL hash (preserving other params)
+function updateScaleInUrl(scale: 'log' | 'linear') {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  if (scale === 'log') {
+    params.delete('scale');
+  } else {
+    params.set('scale', 'lin');
+  }
+  const newHash = params.toString();
+  window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
+}
+
 export function MandelbrotCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [theme, setTheme] = useState<ColorTheme>(() => getThemeFromUrl());
   const [colorOffset, setColorOffset] = useState(0);
+  const [colorScale, setColorScale] = useState<'log' | 'linear'>(() => getScaleFromUrl());
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   
   // Apply color offset to rotate palette
@@ -51,6 +74,12 @@ export function MandelbrotCanvas() {
   const handleThemeChange = useCallback((newTheme: ColorTheme) => {
     setTheme(newTheme);
     updateThemeInUrl(newTheme.id);
+  }, []);
+
+  // Update URL when scale changes
+  const handleScaleChange = useCallback((newScale: 'log' | 'linear') => {
+    setColorScale(newScale);
+    updateScaleInUrl(newScale);
   }, []);
 
   // Screenshot export
@@ -74,6 +103,7 @@ export function MandelbrotCanvas() {
   const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, navigateTo, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
     theme: rotatedTheme,
+    colorScale,
   });
 
   // Handle resize
@@ -316,6 +346,8 @@ export function MandelbrotCanvas() {
         themes={colorThemes}
         currentTheme={theme}
         onThemeChange={handleThemeChange}
+        colorScale={colorScale}
+        onScaleChange={handleScaleChange}
         onScreenshot={handleScreenshot}
         onReset={reset}
         onFullscreen={toggleFullscreen}

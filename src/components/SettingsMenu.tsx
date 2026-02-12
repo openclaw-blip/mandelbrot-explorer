@@ -8,6 +8,8 @@ interface SettingsMenuProps {
   themes: ColorTheme[];
   currentTheme: ColorTheme;
   onThemeChange: (theme: ColorTheme) => void;
+  colorScale: 'log' | 'linear';
+  onScaleChange: (scale: 'log' | 'linear') => void;
   onScreenshot: () => void;
   onReset: () => void;
   onFullscreen: () => void;
@@ -70,7 +72,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SettingsMenu({ themes, currentTheme, onThemeChange, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
+export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
@@ -288,6 +290,17 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, onScreenshot
               ))}
             </div>
           )}
+          
+          <button 
+            className="settings-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onScaleChange(colorScale === 'log' ? 'linear' : 'log');
+            }}
+          >
+            <span className="settings-icon">📊</span>
+            <span className="settings-label">Scale: {colorScale === 'log' ? 'Log' : 'Linear'}</span>
+          </button>
           
           <div className="settings-divider" />
           

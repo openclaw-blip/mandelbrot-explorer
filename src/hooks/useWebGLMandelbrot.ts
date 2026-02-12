@@ -10,6 +10,7 @@ interface ViewState {
 interface UseWebGLMandelbrotOptions {
   maxIterations?: number;
   theme?: ColorTheme;
+  colorScale?: 'log' | 'linear';
 }
 
 const vertexShaderSource = `#version 300 es
@@ -40,6 +41,7 @@ const fragmentShaderSource = `#version 300 es
   
   // Color palette uniforms
   uniform vec3 u_colors[8];
+  uniform int u_colorScale;  // 0 = log, 1 = linear
   
   // Fetch reference orbit value Z_n from texture
   vec2 getRefZ(int n) {
@@ -157,9 +159,16 @@ const fragmentShaderSource = `#version 300 es
       // Didn't escape but also didn't reach max - treat as in set
       fragColor = vec4(0.0, 0.0, 0.0, 1.0);
     } else {
-      float mag2 = z.x * z.x + z.y * z.y;
-      float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(mag2)));
-      float t = smoothed * 0.05;
+      float t;
+      if (u_colorScale == 1) {
+        // Linear scale: iteration / maxIterations
+        t = float(iteration) / float(u_maxIterations) * 4.0;
+      } else {
+        // Log scale: smooth coloring with log adjustments
+        float mag2 = z.x * z.x + z.y * z.y;
+        float smoothed = float(iteration) + 1.0 - log2(max(1.0, log2(mag2)));
+        t = smoothed * 0.05;
+      }
       fragColor = vec4(getColor(t), 1.0);
     }
   }
@@ -297,17 +306,22 @@ function parseUrlState(): ViewState | null {
   return { centerX: x, centerY: y, zoom: z };
 }
 
-// Write view state to URL hash (without triggering navigation)
+// Write view state to URL hash (preserving theme/scale params)
 function updateUrl(view: ViewState) {
-  const hash = `x=${view.centerX}&y=${view.centerY}&z=${view.zoom}`;
-  window.history.replaceState(null, '', `#${hash}`);
+  const existingHash = window.location.hash.slice(1);
+  const params = new URLSearchParams(existingHash);
+  params.set('x', String(view.centerX));
+  params.set('y', String(view.centerY));
+  params.set('z', String(view.zoom));
+  const newHash = params.toString();
+  window.history.replaceState(null, '', `#${newHash}`);
 }
 
 export function useWebGLMandelbrot(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseWebGLMandelbrotOptions = {}
 ) {
-  const { maxIterations = 1000, theme = defaultTheme } = options;
+  const { maxIterations = 1000, theme = defaultTheme, colorScale = 'log' } = options;
 
   // Initialize from URL or defaults
   const [viewState, setViewState] = useState<ViewState>(() => {
@@ -327,6 +341,7 @@ export function useWebGLMandelbrot(
     refOrbitLen: WebGLUniformLocation | null;
     refOrbit: WebGLUniformLocation | null;
     colors: WebGLUniformLocation | null;
+    colorScale: WebGLUniformLocation | null;
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
@@ -393,6 +408,7 @@ export function useWebGLMandelbrot(
       refOrbitLen: gl.getUniformLocation(program, 'u_refOrbitLen'),
       refOrbit: gl.getUniformLocation(program, 'u_refOrbit'),
       colors: gl.getUniformLocation(program, 'u_colors'),
+      colorScale: gl.getUniformLocation(program, 'u_colorScale'),
     };
 
     glRef.current = gl;
@@ -434,6 +450,7 @@ export function useWebGLMandelbrot(
       // Set color palette
       const colorData = new Float32Array(theme.colors.flat());
       gl.uniform3fv(uniformsRef.current!.colors, colorData);
+      gl.uniform1i(uniformsRef.current!.colorScale, colorScale === 'linear' ? 1 : 0);
       
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
@@ -447,7 +464,7 @@ export function useWebGLMandelbrot(
       gl.deleteShader(fragmentShader);
       gl.deleteTexture(refOrbitTex);
     };
-  }, [canvasRef]);
+  }, [canvasRef, colorScale, theme]);
 
   const render = useCallback((view: ViewState) => {
     const gl = glRef.current;
@@ -510,13 +527,14 @@ export function useWebGLMandelbrot(
     // Set color palette
     const colorData = new Float32Array(theme.colors.flat());
     gl.uniform3fv(uniforms.colors, colorData);
+    gl.uniform1i(uniforms.colorScale, colorScale === 'linear' ? 1 : 0);
     
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
     gl.uniform1i(uniforms.refOrbit, 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }, [canvasRef, maxIterations, theme]);
+  }, [canvasRef, maxIterations, theme, colorScale]);
 
   const animateTo = useCallback((target: ViewState, duration: number = 300) => {
     const startView = { ...currentViewRef.current };
