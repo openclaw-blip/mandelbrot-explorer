@@ -8,18 +8,18 @@ interface MinimapProps {
   theme: ColorTheme;
 }
 
-// The minimap shows this fixed view of the Mandelbrot set
-const MINIMAP_CENTER_X = -0.5;
-const MINIMAP_CENTER_Y = 0;
-const MINIMAP_ZOOM = 0.8;
 const MINIMAP_WIDTH = 120;
 const MINIMAP_HEIGHT = 80;
+const MIN_VIEWPORT_PERCENT = 15; // Minimum viewport size as % of minimap
 
-// Simple CPU renderer for minimap (doesn't need to be fast, renders once per theme change)
+// Simple CPU renderer for minimap
 function renderMinimap(
   canvas: HTMLCanvasElement,
   theme: ColorTheme,
-  maxIterations: number = 100
+  centerX: number,
+  centerY: number,
+  minimapZoom: number,
+  maxIterations: number = 150
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -30,10 +30,10 @@ function renderMinimap(
   const data = imageData.data;
 
   const aspectRatio = width / height;
-  const viewWidth = 4 / MINIMAP_ZOOM;
+  const viewWidth = 4 / minimapZoom;
   const viewHeight = viewWidth / aspectRatio;
-  const minX = MINIMAP_CENTER_X - viewWidth / 2;
-  const minY = MINIMAP_CENTER_Y - viewHeight / 2;
+  const minX = centerX - viewWidth / 2;
+  const minY = centerY - viewHeight / 2;
 
   for (let py = 0; py < height; py++) {
     for (let px = 0; px < width; px++) {
@@ -85,46 +85,81 @@ function renderMinimap(
 
 export function Minimap({ centerX, centerY, zoom, theme }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastRenderRef = useRef<{ centerX: number; centerY: number; zoom: number } | null>(null);
 
-  // Render minimap when theme changes
+  // Calculate adaptive minimap zoom - zoom in enough to keep viewport rectangle visible
+  const minimapState = useMemo(() => {
+    const minimapAspect = MINIMAP_WIDTH / MINIMAP_HEIGHT;
+    
+    // Start with a base zoom that shows the full set
+    const baseZoom = 0.8;
+    
+    // Calculate what the viewport size would be at base zoom
+    const baseViewWidth = 4 / baseZoom;
+    const currentViewWidth = 4 / zoom;
+    const viewportPercent = (currentViewWidth / baseViewWidth) * 100;
+    
+    // If viewport would be too small, zoom in the minimap
+    let minimapZoom = baseZoom;
+    let minimapCenterX = -0.5;
+    let minimapCenterY = 0;
+    
+    if (viewportPercent < MIN_VIEWPORT_PERCENT) {
+      // Zoom minimap so viewport is MIN_VIEWPORT_PERCENT of minimap
+      minimapZoom = zoom * (MIN_VIEWPORT_PERCENT / 100);
+      minimapCenterX = centerX;
+      minimapCenterY = centerY;
+    }
+    
+    // Calculate viewport rectangle
+    const minimapViewWidth = 4 / minimapZoom;
+    const minimapViewHeight = minimapViewWidth / minimapAspect;
+    const currentViewHeight = currentViewWidth / minimapAspect;
+    
+    const rectWidth = (currentViewWidth / minimapViewWidth) * 100;
+    const rectHeight = (currentViewHeight / minimapViewHeight) * 100;
+    
+    const offsetX = centerX - minimapCenterX;
+    const offsetY = centerY - minimapCenterY;
+    
+    const rectX = 50 + (offsetX / minimapViewWidth) * 100;
+    const rectY = 50 - (offsetY / minimapViewHeight) * 100;
+    
+    return {
+      minimapZoom,
+      minimapCenterX,
+      minimapCenterY,
+      viewport: {
+        left: `${rectX - rectWidth / 2}%`,
+        top: `${rectY - rectHeight / 2}%`,
+        width: `${Math.max(rectWidth, 3)}%`,
+        height: `${Math.max(rectHeight, 3)}%`,
+        visible: rectWidth < 95 && rectHeight < 95,
+      }
+    };
+  }, [centerX, centerY, zoom]);
+
+  // Render minimap when theme or minimap view changes significantly
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
-    canvas.width = MINIMAP_WIDTH * 2; // 2x for retina
-    canvas.height = MINIMAP_HEIGHT * 2;
-    renderMinimap(canvas, theme);
-  }, [theme]);
-
-  // Calculate viewport rectangle position and size
-  const viewportRect = useMemo(() => {
-    const minimapAspect = MINIMAP_WIDTH / MINIMAP_HEIGHT;
-    const minimapViewWidth = 4 / MINIMAP_ZOOM;
-    const minimapViewHeight = minimapViewWidth / minimapAspect;
+    const last = lastRenderRef.current;
+    const { minimapCenterX, minimapCenterY, minimapZoom } = minimapState;
     
-    // Current view dimensions in complex plane
-    const currentViewWidth = 4 / zoom;
-    const currentViewHeight = currentViewWidth / minimapAspect;
+    // Check if we need to re-render
+    const needsRender = !last || 
+      Math.abs(last.centerX - minimapCenterX) > 0.01 / minimapZoom ||
+      Math.abs(last.centerY - minimapCenterY) > 0.01 / minimapZoom ||
+      Math.abs(last.zoom - minimapZoom) / minimapZoom > 0.1;
     
-    // Rectangle dimensions as percentage of minimap
-    const rectWidth = (currentViewWidth / minimapViewWidth) * 100;
-    const rectHeight = (currentViewHeight / minimapViewHeight) * 100;
-    
-    // Rectangle position (center of view relative to minimap)
-    const offsetX = centerX - MINIMAP_CENTER_X;
-    const offsetY = centerY - MINIMAP_CENTER_Y;
-    
-    const rectX = 50 + (offsetX / minimapViewWidth) * 100;
-    const rectY = 50 - (offsetY / minimapViewHeight) * 100; // Flip Y
-    
-    return {
-      left: `${rectX - rectWidth / 2}%`,
-      top: `${rectY - rectHeight / 2}%`,
-      width: `${Math.max(rectWidth, 2)}%`,
-      height: `${Math.max(rectHeight, 2)}%`,
-      visible: rectWidth < 100 && rectHeight < 100,
-    };
-  }, [centerX, centerY, zoom]);
+    if (needsRender) {
+      canvas.width = MINIMAP_WIDTH * 2;
+      canvas.height = MINIMAP_HEIGHT * 2;
+      renderMinimap(canvas, theme, minimapCenterX, minimapCenterY, minimapZoom);
+      lastRenderRef.current = { centerX: minimapCenterX, centerY: minimapCenterY, zoom: minimapZoom };
+    }
+  }, [theme, minimapState]);
 
   return (
     <div className="minimap">
@@ -133,14 +168,14 @@ export function Minimap({ centerX, centerY, zoom, theme }: MinimapProps) {
         className="minimap-canvas"
         style={{ width: MINIMAP_WIDTH, height: MINIMAP_HEIGHT }}
       />
-      {viewportRect.visible && (
+      {minimapState.viewport.visible && (
         <div 
           className="minimap-viewport"
           style={{
-            left: viewportRect.left,
-            top: viewportRect.top,
-            width: viewportRect.width,
-            height: viewportRect.height,
+            left: minimapState.viewport.left,
+            top: minimapState.viewport.top,
+            width: minimapState.viewport.width,
+            height: minimapState.viewport.height,
           }}
         />
       )}
