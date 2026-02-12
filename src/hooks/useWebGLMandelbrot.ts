@@ -689,16 +689,19 @@ export function useWebGLMandelbrot(
   }, [render]);
 
   const navigateTo = useCallback((newCenterX: number, newCenterY: number, newZoom: number) => {
-    const newView: ViewState = {
+    const target: ViewState = {
       centerX: newCenterX,
       centerY: newCenterY,
       zoom: newZoom,
     };
-    currentViewRef.current = newView;
-    setViewState(newView);
-    render(newView);
-    updateUrl(newView);
-  }, [render]);
+    
+    // Calculate duration based on how far we're traveling
+    const currentZoom = currentViewRef.current.zoom;
+    const zoomRatio = Math.max(newZoom / currentZoom, currentZoom / newZoom);
+    const duration = Math.min(300 + Math.log10(zoomRatio) * 400, 2000);
+    
+    animateTo(target, duration);
+  }, [animateTo]);
 
   return {
     viewState,
