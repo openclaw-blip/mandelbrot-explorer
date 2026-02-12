@@ -56,6 +56,18 @@ body {
   z-index: 100;
 }
 
+@media (max-width: 600px) {
+  .info-overlay {
+    bottom: 8px;
+    left: 8px;
+    gap: 8px;
+    padding: 6px 8px;
+    font-size: 9px;
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
 .info-item {
   display: flex;
   gap: 4px;
