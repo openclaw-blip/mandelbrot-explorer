@@ -14,7 +14,7 @@ export function MandelbrotCanvas() {
   const [theme, setTheme] = useState<ColorTheme>(defaultTheme);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
+  const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
     theme,
   });
@@ -131,6 +131,7 @@ export function MandelbrotCanvas() {
         centerY={viewState.centerY}
         zoom={viewState.zoom}
         theme={theme}
+        onNavigate={setCenter}
       />
       <InfoOverlay
         centerX={viewState.centerX}

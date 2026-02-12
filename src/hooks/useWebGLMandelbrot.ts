@@ -676,6 +676,18 @@ export function useWebGLMandelbrot(
     render(currentViewRef.current);
   }, [render]);
 
+  const setCenter = useCallback((newCenterX: number, newCenterY: number) => {
+    const newView: ViewState = {
+      centerX: newCenterX,
+      centerY: newCenterY,
+      zoom: currentViewRef.current.zoom,
+    };
+    currentViewRef.current = newView;
+    setViewState(newView);
+    render(newView);
+    updateUrl(newView);
+  }, [render]);
+
   return {
     viewState,
     isComputing: false,
@@ -683,6 +695,7 @@ export function useWebGLMandelbrot(
     zoomAtInstant,
     pan,
     reset,
+    setCenter,
     handleResize,
     startDrag,
     stopDrag,

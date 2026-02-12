@@ -167,6 +167,11 @@ body {
   overflow: hidden;
   z-index: 100;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.minimap:hover {
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .minimap-canvas {

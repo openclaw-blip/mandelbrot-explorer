@@ -6,6 +6,7 @@ interface MinimapProps {
   centerY: number;
   zoom: number;
   theme: ColorTheme;
+  onNavigate: (x: number, y: number) => void;
 }
 
 const MINIMAP_WIDTH = 120;
@@ -83,8 +84,9 @@ function renderMinimap(
   ctx.putImageData(imageData, 0, 0);
 }
 
-export function Minimap({ centerX, centerY, zoom, theme }: MinimapProps) {
+export function Minimap({ centerX, centerY, zoom, theme, onNavigate }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const lastRenderRef = useRef<{ centerX: number; centerY: number; zoom: number } | null>(null);
 
   // Calculate adaptive minimap zoom - zoom in enough to keep viewport rectangle visible
@@ -161,8 +163,33 @@ export function Minimap({ centerX, centerY, zoom, theme }: MinimapProps) {
     }
   }, [theme, minimapState]);
 
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) / rect.width;  // 0-1
+    const clickY = (e.clientY - rect.top) / rect.height;  // 0-1
+    
+    // Convert to complex plane coordinates
+    const { minimapCenterX, minimapCenterY, minimapZoom } = minimapState;
+    const minimapAspect = MINIMAP_WIDTH / MINIMAP_HEIGHT;
+    const minimapViewWidth = 4 / minimapZoom;
+    const minimapViewHeight = minimapViewWidth / minimapAspect;
+    
+    const newCenterX = minimapCenterX + (clickX - 0.5) * minimapViewWidth;
+    const newCenterY = minimapCenterY - (clickY - 0.5) * minimapViewHeight; // Flip Y
+    
+    onNavigate(newCenterX, newCenterY);
+  };
+
   return (
-    <div className="minimap">
+    <div 
+      className="minimap" 
+      ref={containerRef}
+      onClick={handleClick}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       <canvas 
         ref={canvasRef} 
         className="minimap-canvas"
