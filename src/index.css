@@ -242,6 +242,12 @@ body {
   padding: 4px 0 0 0;
 }
 
+.theme-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 6px 8px;
+}
+
 .theme-item {
   width: 100%;
   display: flex;

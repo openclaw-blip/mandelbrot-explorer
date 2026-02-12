@@ -7,10 +7,19 @@ interface ViewState {
   zoom: number;
 }
 
+export type FractalSet = {
+  type: 'mandelbrot';
+} | {
+  type: 'julia';
+  cr: number;
+  ci: number;
+};
+
 interface UseWebGLMandelbrotOptions {
   maxIterations?: number;
   theme?: ColorTheme;
   colorScale?: 'log' | 'linear';
+  fractalSet?: FractalSet;
 }
 
 const vertexShaderSource = `#version 300 es
@@ -42,6 +51,8 @@ const fragmentShaderSource = `#version 300 es
   // Color palette uniforms
   uniform vec3 u_colors[8];
   uniform int u_colorScale;  // 0 = log, 1 = linear
+  uniform int u_setType;     // 0 = Mandelbrot, 1 = Julia
+  uniform vec2 u_juliaC;     // c parameter for Julia set
   
   // Fetch reference orbit value Z_n from texture
   vec2 getRefZ(int n) {
@@ -84,59 +95,18 @@ const fragmentShaderSource = `#version 300 es
     float px = v_uv.x - 0.5;
     float py = v_uv.y - 0.5;
     vec2 pixelOffset = vec2(px * u_viewScale.x, py * u_viewScale.y);
+    vec2 pixelCoord = u_center + pixelOffset;
     
-    // Delta c = (pixel's c) - refPoint
-    //         = (center + pixelOffset) - refPoint
-    //         = pixelOffset - (refPoint - center)
-    //         = pixelOffset - u_refOffset
-    vec2 dc = pixelOffset - u_refOffset;
-    
-    // Perturbation iteration
-    vec2 dz = vec2(0.0, 0.0);
-    vec2 z = vec2(0.0, 0.0);  // Full z value
-    
+    vec2 z;
     int iteration = 0;
     bool escaped = false;
-    bool useDirectCompute = false;
     
-    // Phase 1: Perturbation while we have reference orbit
-    for (int i = 0; i < 10000; i++) {
-      if (i >= u_refOrbitLen || i >= u_maxIterations) {
-        useDirectCompute = (i < u_maxIterations);
-        break;
-      }
+    if (u_setType == 1) {
+      // Julia set: z starts at pixel, c is fixed
+      z = pixelCoord;
+      vec2 c = u_juliaC;
       
-      vec2 Zn = getRefZ(i);
-      z = Zn + dz;
-      float mag2 = z.x * z.x + z.y * z.y;
-      
-      if (mag2 > 4.0) {
-        escaped = true;
-        break;
-      }
-      
-      // Check if delta is getting too large (glitch detection)
-      float dzMag2 = dz.x * dz.x + dz.y * dz.y;
-      if (dzMag2 > 1e6) {
-        // Delta too large, switch to direct computation
-        useDirectCompute = true;
-        break;
-      }
-      
-      // δz_new = 2·Z·δz + δz² + δc
-      vec2 twoZdz = 2.0 * vec2(Zn.x * dz.x - Zn.y * dz.y, Zn.x * dz.y + Zn.y * dz.x);
-      vec2 dz2 = vec2(dz.x * dz.x - dz.y * dz.y, 2.0 * dz.x * dz.y);
-      dz = twoZdz + dz2 + dc;
-      
-      iteration = i + 1;
-    }
-    
-    // Phase 2: Direct computation if needed (when reference orbit ran out)
-    if (useDirectCompute && !escaped) {
-      // Use center + pixelOffset for c (may lose precision at deep zoom, but fallback is rare)
-      vec2 c = u_center + pixelOffset;
-      
-      for (int i = iteration; i < 10000; i++) {
+      for (int i = 0; i < 10000; i++) {
         if (i >= u_maxIterations) break;
         
         float mag2 = z.x * z.x + z.y * z.y;
@@ -148,8 +118,67 @@ const fragmentShaderSource = `#version 300 es
         float zr2 = z.x * z.x;
         float zi2 = z.y * z.y;
         z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
+        iteration = i + 1;
+      }
+    } else {
+      // Mandelbrot set: use perturbation theory
+      // Delta c = (pixel's c) - refPoint
+      vec2 dc = pixelOffset - u_refOffset;
+      
+      vec2 dz = vec2(0.0, 0.0);
+      z = vec2(0.0, 0.0);
+      bool useDirectCompute = false;
+      
+      // Phase 1: Perturbation while we have reference orbit
+      for (int i = 0; i < 10000; i++) {
+        if (i >= u_refOrbitLen || i >= u_maxIterations) {
+          useDirectCompute = (i < u_maxIterations);
+          break;
+        }
+        
+        vec2 Zn = getRefZ(i);
+        z = Zn + dz;
+        float mag2 = z.x * z.x + z.y * z.y;
+        
+        if (mag2 > 4.0) {
+          escaped = true;
+          break;
+        }
+        
+        // Check if delta is getting too large (glitch detection)
+        float dzMag2 = dz.x * dz.x + dz.y * dz.y;
+        if (dzMag2 > 1e6) {
+          useDirectCompute = true;
+          break;
+        }
+        
+        // δz_new = 2·Z·δz + δz² + δc
+        vec2 twoZdz = 2.0 * vec2(Zn.x * dz.x - Zn.y * dz.y, Zn.x * dz.y + Zn.y * dz.x);
+        vec2 dz2 = vec2(dz.x * dz.x - dz.y * dz.y, 2.0 * dz.x * dz.y);
+        dz = twoZdz + dz2 + dc;
         
         iteration = i + 1;
+      }
+      
+      // Phase 2: Direct computation if needed
+      if (useDirectCompute && !escaped) {
+        vec2 c = pixelCoord;
+        
+        for (int i = iteration; i < 10000; i++) {
+          if (i >= u_maxIterations) break;
+          
+          float mag2 = z.x * z.x + z.y * z.y;
+          if (mag2 > 4.0) {
+            escaped = true;
+            break;
+          }
+          
+          float zr2 = z.x * z.x;
+          float zi2 = z.y * z.y;
+          z = vec2(zr2 - zi2 + c.x, 2.0 * z.x * z.y + c.y);
+          
+          iteration = i + 1;
+        }
       }
     }
     
@@ -321,7 +350,7 @@ export function useWebGLMandelbrot(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseWebGLMandelbrotOptions = {}
 ) {
-  const { maxIterations = 1000, theme = defaultTheme, colorScale = 'log' } = options;
+  const { maxIterations = 1000, theme = defaultTheme, colorScale = 'log', fractalSet = { type: 'mandelbrot' } } = options;
 
   // Initialize from URL or defaults
   const [viewState, setViewState] = useState<ViewState>(() => {
@@ -342,6 +371,8 @@ export function useWebGLMandelbrot(
     refOrbit: WebGLUniformLocation | null;
     colors: WebGLUniformLocation | null;
     colorScale: WebGLUniformLocation | null;
+    setType: WebGLUniformLocation | null;
+    juliaC: WebGLUniformLocation | null;
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
@@ -409,6 +440,8 @@ export function useWebGLMandelbrot(
       refOrbit: gl.getUniformLocation(program, 'u_refOrbit'),
       colors: gl.getUniformLocation(program, 'u_colors'),
       colorScale: gl.getUniformLocation(program, 'u_colorScale'),
+      setType: gl.getUniformLocation(program, 'u_setType'),
+      juliaC: gl.getUniformLocation(program, 'u_juliaC'),
     };
 
     glRef.current = gl;
@@ -451,6 +484,11 @@ export function useWebGLMandelbrot(
       const colorData = new Float32Array(theme.colors.flat());
       gl.uniform3fv(uniformsRef.current!.colors, colorData);
       gl.uniform1i(uniformsRef.current!.colorScale, colorScale === 'linear' ? 1 : 0);
+      gl.uniform1i(uniformsRef.current!.setType, fractalSet.type === 'julia' ? 1 : 0);
+      gl.uniform2f(uniformsRef.current!.juliaC, 
+        fractalSet.type === 'julia' ? fractalSet.cr : 0,
+        fractalSet.type === 'julia' ? fractalSet.ci : 0
+      );
       
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
@@ -464,7 +502,7 @@ export function useWebGLMandelbrot(
       gl.deleteShader(fragmentShader);
       gl.deleteTexture(refOrbitTex);
     };
-  }, [canvasRef, colorScale, theme]);
+  }, [canvasRef, colorScale, theme, fractalSet]);
 
   const render = useCallback((view: ViewState) => {
     const gl = glRef.current;
@@ -528,13 +566,18 @@ export function useWebGLMandelbrot(
     const colorData = new Float32Array(theme.colors.flat());
     gl.uniform3fv(uniforms.colors, colorData);
     gl.uniform1i(uniforms.colorScale, colorScale === 'linear' ? 1 : 0);
+    gl.uniform1i(uniforms.setType, fractalSet.type === 'julia' ? 1 : 0);
+    gl.uniform2f(uniforms.juliaC,
+      fractalSet.type === 'julia' ? fractalSet.cr : 0,
+      fractalSet.type === 'julia' ? fractalSet.ci : 0
+    );
     
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, refOrbitTex);
     gl.uniform1i(uniforms.refOrbit, 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }, [canvasRef, maxIterations, theme, colorScale]);
+  }, [canvasRef, maxIterations, theme, colorScale, fractalSet]);
 
   const animateTo = useCallback((target: ViewState, duration: number = 300) => {
     const startView = { ...currentViewRef.current };

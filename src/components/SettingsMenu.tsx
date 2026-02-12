@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ColorTheme } from '../colorThemes';
 import { interestingLocations } from '../locations';
+import { FractalSet } from '../hooks/useWebGLMandelbrot';
+import { JuliaPreset } from '../juliaSets';
 
 type CopyState = 'idle' | 'success' | 'error';
 
@@ -10,6 +12,9 @@ interface SettingsMenuProps {
   onThemeChange: (theme: ColorTheme) => void;
   colorScale: 'log' | 'linear';
   onScaleChange: (scale: 'log' | 'linear') => void;
+  fractalSet: FractalSet;
+  onFractalSetChange: (set: FractalSet) => void;
+  juliaPresets: JuliaPreset[];
   onScreenshot: () => void;
   onReset: () => void;
   onFullscreen: () => void;
@@ -72,10 +77,11 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
+export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, fractalSet, onFractalSetChange, juliaPresets, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
+  const [showSets, setShowSets] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const menuRef = useRef<HTMLDivElement>(null);
@@ -85,6 +91,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
     if (!isOpen) {
       setShowThemes(false);
       setShowLocations(false);
+      setShowSets(false);
       return;
     }
     
@@ -225,10 +232,62 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
           <div className="settings-divider" />
           
           <button 
+            className={`settings-item ${showSets ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowSets(!showSets);
+              setShowLocations(false);
+              setShowThemes(false);
+            }}
+          >
+            <span className="settings-icon">🔮</span>
+            <span className="settings-label">Sets</span>
+            <span className="settings-arrow">{showSets ? '▼' : '▶'}</span>
+          </button>
+          
+          {showSets && (
+            <div className="theme-list">
+              <button
+                className={`theme-item ${fractalSet.type === 'mandelbrot' ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFractalSetChange({ type: 'mandelbrot' });
+                  setShowSets(false);
+                  setIsOpen(false);
+                }}
+              >
+                <span className="theme-name">Mandelbrot</span>
+                {fractalSet.type === 'mandelbrot' && <span className="theme-check">✓</span>}
+              </button>
+              <div className="theme-divider" />
+              {juliaPresets.map(preset => {
+                const isActive = fractalSet.type === 'julia' && 
+                  fractalSet.cr === preset.cr && fractalSet.ci === preset.ci;
+                return (
+                  <button
+                    key={preset.id}
+                    className={`theme-item ${isActive ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFractalSetChange({ type: 'julia', cr: preset.cr, ci: preset.ci });
+                      setShowSets(false);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="theme-name">Julia: {preset.name}</span>
+                    {isActive && <span className="theme-check">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          
+          <button 
             className={`settings-item ${showLocations ? 'active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               setShowLocations(!showLocations);
+              setShowSets(false);
               setShowThemes(false);
             }}
           >
@@ -262,6 +321,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               e.stopPropagation();
               setShowThemes(!showThemes);
               setShowLocations(false);
+              setShowSets(false);
             }}
           >
             <span className="settings-icon">🎨</span>

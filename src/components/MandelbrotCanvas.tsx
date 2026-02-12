@@ -1,10 +1,11 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { useWebGLMandelbrot } from '../hooks/useWebGLMandelbrot';
+import { useWebGLMandelbrot, FractalSet } from '../hooks/useWebGLMandelbrot';
 import { InfoOverlay } from './InfoOverlay';
 import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
 import { Minimap } from './Minimap';
 import { ColorTheme, colorThemes, defaultTheme, getThemeById } from '../colorThemes';
+import { juliaPresets, fractalSetFromUrlParams, fractalSetToUrlParams } from '../juliaSets';
 
 // Read theme from URL hash
 function getThemeFromUrl(): ColorTheme {
@@ -50,6 +51,32 @@ function updateScaleInUrl(scale: 'log' | 'linear') {
   window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
 }
 
+// Read fractal set from URL hash
+function getFractalSetFromUrl(): FractalSet {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return { type: 'mandelbrot' };
+  const params = new URLSearchParams(hash);
+  return fractalSetFromUrlParams(params);
+}
+
+// Update fractal set in URL hash (preserving other params)
+function updateFractalSetInUrl(set: FractalSet) {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  // Clear old set params
+  params.delete('set');
+  params.delete('j');
+  params.delete('jr');
+  params.delete('ji');
+  // Add new params
+  const newParams = fractalSetToUrlParams(set);
+  for (const [key, value] of Object.entries(newParams)) {
+    params.set(key, value);
+  }
+  const newHash = params.toString();
+  window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
+}
+
 export function MandelbrotCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +84,7 @@ export function MandelbrotCanvas() {
   const [theme, setTheme] = useState<ColorTheme>(() => getThemeFromUrl());
   const [colorOffset, setColorOffset] = useState(0);
   const [colorScale, setColorScale] = useState<'log' | 'linear'>(() => getScaleFromUrl());
+  const [fractalSet, setFractalSet] = useState<FractalSet>(() => getFractalSetFromUrl());
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   
   // Apply color offset to rotate palette
@@ -82,6 +110,12 @@ export function MandelbrotCanvas() {
     updateScaleInUrl(newScale);
   }, []);
 
+  // Update URL when fractal set changes
+  const handleFractalSetChange = useCallback((newSet: FractalSet) => {
+    setFractalSet(newSet);
+    updateFractalSetInUrl(newSet);
+  }, []);
+
   // Screenshot export
   const handleScreenshot = useCallback(() => {
     const canvas = canvasRef.current;
@@ -104,6 +138,7 @@ export function MandelbrotCanvas() {
     maxIterations: 1000,
     theme: rotatedTheme,
     colorScale,
+    fractalSet,
   });
 
   // Handle resize
@@ -348,6 +383,9 @@ export function MandelbrotCanvas() {
         onThemeChange={handleThemeChange}
         colorScale={colorScale}
         onScaleChange={handleScaleChange}
+        fractalSet={fractalSet}
+        onFractalSetChange={handleFractalSetChange}
+        juliaPresets={juliaPresets}
         onScreenshot={handleScreenshot}
         onReset={reset}
         onFullscreen={toggleFullscreen}
