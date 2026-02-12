@@ -34,80 +34,82 @@ const fragmentShaderSource = `#version 300 es
   uniform vec2 u_scaleHi;  // (viewWidth, viewHeight) high bits
   uniform vec2 u_scaleLo;  // (viewWidth, viewHeight) low bits
   uniform int u_maxIterations;
+  uniform float u_zero;    // Always 0.0, prevents compiler optimization
   
   // ============================================
   // Double-Single Arithmetic (Emulated Float64)
-  // Uses 'precise' to prevent optimizations that break error-free arithmetic
   // ============================================
   
-  // Create DS from single float
+  // Prevent optimization: compiler can't know u_zero is always 0
+  float noOpt(float x) { return x + u_zero; }
+  
   vec2 ds(float a) {
     return vec2(a, 0.0);
   }
   
   // Quick Two-Sum: assumes |a| >= |b|
-  precise vec2 quickTwoSum(float a, float b) {
-    precise float s = a + b;
-    precise float e = b - (s - a);
+  vec2 quickTwoSum(float a, float b) {
+    float s = noOpt(a + b);
+    float e = noOpt(b - noOpt(s - a));
     return vec2(s, e);
   }
   
-  // Two-Sum: works for any a, b
-  precise vec2 twoSum(float a, float b) {
-    precise float s = a + b;
-    precise float v = s - a;
-    precise float e = (a - (s - v)) + (b - v);
+  // Two-Sum: works for any a, b  
+  vec2 twoSum(float a, float b) {
+    float s = noOpt(a + b);
+    float v = noOpt(s - a);
+    float e = noOpt(noOpt(a - noOpt(s - v)) + noOpt(b - v));
     return vec2(s, e);
   }
   
   // Split a float for Veltkamp/Dekker multiplication
-  precise vec2 split(float a) {
-    precise float c = 4097.0 * a;
-    precise float aHi = c - (c - a);
-    precise float aLo = a - aHi;
+  vec2 split(float a) {
+    float c = noOpt(4097.0 * a);
+    float aHi = noOpt(c - noOpt(c - a));
+    float aLo = noOpt(a - aHi);
     return vec2(aHi, aLo);
   }
   
   // Two-Product: exact product using Dekker's algorithm
-  precise vec2 twoProduct(float a, float b) {
-    precise float p = a * b;
-    precise vec2 aS = split(a);
-    precise vec2 bS = split(b);
-    precise float err = ((aS.x * bS.x - p) + aS.x * bS.y + aS.y * bS.x) + aS.y * bS.y;
+  vec2 twoProduct(float a, float b) {
+    float p = noOpt(a * b);
+    vec2 aS = split(a);
+    vec2 bS = split(b);
+    float err = noOpt(noOpt(noOpt(aS.x * bS.x - p) + aS.x * bS.y + aS.y * bS.x) + aS.y * bS.y);
     return vec2(p, err);
   }
   
   // DS + DS
   vec2 dsAdd(vec2 a, vec2 b) {
-    precise vec2 s = twoSum(a.x, b.x);
-    precise vec2 t = twoSum(a.y, b.y);
-    precise float sy = s.y + t.x;
+    vec2 s = twoSum(a.x, b.x);
+    vec2 t = twoSum(a.y, b.y);
+    float sy = noOpt(s.y + t.x);
     s = quickTwoSum(s.x, sy);
-    sy = s.y + t.y;
+    sy = noOpt(s.y + t.y);
     s = quickTwoSum(s.x, sy);
     return s;
   }
   
   // DS + float
   vec2 dsAddF(vec2 a, float b) {
-    precise vec2 s = twoSum(a.x, b);
-    precise float sy = s.y + a.y;
+    vec2 s = twoSum(a.x, b);
+    float sy = noOpt(s.y + a.y);
     s = quickTwoSum(s.x, sy);
     return s;
   }
   
   // DS * DS
   vec2 dsMul(vec2 a, vec2 b) {
-    precise vec2 p = twoProduct(a.x, b.x);
-    precise float py = p.y + a.x * b.y + a.y * b.x;
+    vec2 p = twoProduct(a.x, b.x);
+    float py = noOpt(p.y + a.x * b.y + a.y * b.x);
     p = quickTwoSum(p.x, py);
     return p;
   }
   
   // DS * float
   vec2 dsMulF(vec2 a, float b) {
-    precise vec2 p = twoProduct(a.x, b);
-    precise float py = p.y + a.y * b;
+    vec2 p = twoProduct(a.x, b);
+    float py = noOpt(p.y + a.y * b);
     p = quickTwoSum(p.x, py);
     return p;
   }
@@ -280,6 +282,7 @@ export function useWebGLMandelbrot(
     scaleHi: WebGLUniformLocation | null;
     scaleLo: WebGLUniformLocation | null;
     maxIterations: WebGLUniformLocation | null;
+    zero: WebGLUniformLocation | null;
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
@@ -324,6 +327,7 @@ export function useWebGLMandelbrot(
       scaleHi: gl.getUniformLocation(program, 'u_scaleHi'),
       scaleLo: gl.getUniformLocation(program, 'u_scaleLo'),
       maxIterations: gl.getUniformLocation(program, 'u_maxIterations'),
+      zero: gl.getUniformLocation(program, 'u_zero'),
     };
 
     glRef.current = gl;
@@ -364,6 +368,7 @@ export function useWebGLMandelbrot(
     gl.uniform2f(uniforms.scaleHi, scaleXHi, scaleYHi);
     gl.uniform2f(uniforms.scaleLo, scaleXLo, scaleYLo);
     gl.uniform1i(uniforms.maxIterations, maxIterations);
+    gl.uniform1f(uniforms.zero, 0.0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }, [canvasRef, maxIterations]);
