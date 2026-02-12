@@ -19,9 +19,10 @@ function renderMinimap(
   theme: ColorTheme,
   centerX: number,
   centerY: number,
-  minimapZoom: number,
-  maxIterations: number = 150
+  minimapZoom: number
 ) {
+  // More iterations needed at higher zoom to see detail
+  const maxIterations = Math.min(150 + Math.floor(Math.log10(minimapZoom + 1) * 50), 500);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
@@ -141,7 +142,7 @@ export function Minimap({ centerX, centerY, zoom, theme, onNavigate }: MinimapPr
     };
   }, [centerX, centerY, zoom]);
 
-  // Render minimap when theme or minimap view changes significantly
+  // Render minimap when theme or minimap view changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -149,11 +150,12 @@ export function Minimap({ centerX, centerY, zoom, theme, onNavigate }: MinimapPr
     const last = lastRenderRef.current;
     const { minimapCenterX, minimapCenterY, minimapZoom } = minimapState;
     
-    // Check if we need to re-render
+    // Check if we need to re-render - use view width for threshold
+    const viewWidth = 4 / minimapZoom;
     const needsRender = !last || 
-      Math.abs(last.centerX - minimapCenterX) > 0.01 / minimapZoom ||
-      Math.abs(last.centerY - minimapCenterY) > 0.01 / minimapZoom ||
-      Math.abs(last.zoom - minimapZoom) / minimapZoom > 0.1;
+      Math.abs(last.centerX - minimapCenterX) > viewWidth * 0.1 ||
+      Math.abs(last.centerY - minimapCenterY) > viewWidth * 0.1 ||
+      Math.abs(last.zoom - minimapZoom) / Math.max(last.zoom, minimapZoom) > 0.2;
     
     if (needsRender) {
       canvas.width = MINIMAP_WIDTH * 2;
