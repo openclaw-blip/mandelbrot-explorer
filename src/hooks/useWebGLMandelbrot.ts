@@ -285,16 +285,37 @@ function computeReferenceOrbit(refX: number, refY: number, maxIterations: number
   return { data: orbit, escapeIter, refX, refY };
 }
 
+// Parse view state from URL hash
+function parseUrlState(): ViewState | null {
+  const hash = window.location.hash.slice(1); // Remove #
+  if (!hash) return null;
+  
+  const params = new URLSearchParams(hash);
+  const x = parseFloat(params.get('x') || '');
+  const y = parseFloat(params.get('y') || '');
+  const z = parseFloat(params.get('z') || '');
+  
+  if (isNaN(x) || isNaN(y) || isNaN(z)) return null;
+  
+  return { centerX: x, centerY: y, zoom: z };
+}
+
+// Write view state to URL hash (without triggering navigation)
+function updateUrl(view: ViewState) {
+  const hash = `x=${view.centerX}&y=${view.centerY}&z=${view.zoom}`;
+  window.history.replaceState(null, '', `#${hash}`);
+}
+
 export function useWebGLMandelbrot(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: UseWebGLMandelbrotOptions = {}
 ) {
   const { maxIterations = 1000 } = options;
 
-  const [viewState, setViewState] = useState<ViewState>({
-    centerX: -0.5,
-    centerY: 0,
-    zoom: 1,
+  // Initialize from URL or defaults
+  const [viewState, setViewState] = useState<ViewState>(() => {
+    const urlState = parseUrlState();
+    return urlState || { centerX: -0.5, centerY: 0, zoom: 1 };
   });
 
   const glRef = useRef<WebGL2RenderingContext | null>(null);
@@ -311,8 +332,10 @@ export function useWebGLMandelbrot(
   } | null>(null);
   
   const animationFrameRef = useRef<number>();
-  const currentViewRef = useRef<ViewState>(viewState);
+  const initialView = parseUrlState() || { centerX: -0.5, centerY: 0, zoom: 1 };
+  const currentViewRef = useRef<ViewState>(initialView);
   const lastRefPointRef = useRef<{ centerX: number; centerY: number; refX: number; refY: number; escapeIter: number; zoom: number } | null>(null);
+  const urlUpdateTimeoutRef = useRef<number>();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -498,6 +521,9 @@ export function useWebGLMandelbrot(
       
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        // Update URL when animation completes
+        updateUrl(currentView);
       }
     };
     
@@ -556,6 +582,14 @@ export function useWebGLMandelbrot(
     currentViewRef.current = newView;
     setViewState(newView);
     render(newView);
+    
+    // Debounced URL update for panning
+    if (urlUpdateTimeoutRef.current) {
+      clearTimeout(urlUpdateTimeoutRef.current);
+    }
+    urlUpdateTimeoutRef.current = window.setTimeout(() => {
+      updateUrl(newView);
+    }, 300);
   }, [canvasRef, render]);
 
   const reset = useCallback(() => {
