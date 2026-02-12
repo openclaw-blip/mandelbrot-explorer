@@ -547,6 +547,43 @@ export function useWebGLMandelbrot(
     animationFrameRef.current = requestAnimationFrame(animate);
   }, [render]);
 
+  // Instant zoom for wheel events (no animation, accumulates)
+  const zoomAtInstant = useCallback((screenX: number, screenY: number, zoomFactor: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = screenX - rect.left;
+    const y = screenY - rect.top;
+    
+    const aspectRatio = rect.width / rect.height;
+    
+    const current = currentViewRef.current;
+    const viewWidth = 4 / current.zoom;
+    const viewHeight = viewWidth / aspectRatio;
+    
+    const realPart = current.centerX + (x / rect.width - 0.5) * viewWidth;
+    const imagPart = current.centerY + (0.5 - y / rect.height) * viewHeight;
+    
+    const newZoom = current.zoom * zoomFactor;
+    
+    // Pan towards/away from mouse point
+    const panFactor = zoomFactor > 1 ? (1 - 1/zoomFactor) : (1 - zoomFactor);
+    const direction = zoomFactor > 1 ? 1 : -1;
+    const newCenterX = current.centerX + (realPart - current.centerX) * panFactor * direction;
+    const newCenterY = current.centerY + (imagPart - current.centerY) * panFactor * direction;
+    
+    const newView = { centerX: newCenterX, centerY: newCenterY, zoom: newZoom };
+    currentViewRef.current = newView;
+    setViewState(newView);
+    render(newView);
+    
+    // Debounced URL update
+    if (urlUpdateTimeoutRef.current) clearTimeout(urlUpdateTimeoutRef.current);
+    urlUpdateTimeoutRef.current = window.setTimeout(() => updateUrl(newView), 300);
+  }, [canvasRef, render]);
+
+  // Animated zoom for click events
   const zoomAt = useCallback((screenX: number, screenY: number, zoomIn: boolean) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -637,6 +674,7 @@ export function useWebGLMandelbrot(
     viewState,
     isComputing: false,
     zoomAt,
+    zoomAtInstant,
     pan,
     reset,
     handleResize,

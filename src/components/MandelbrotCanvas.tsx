@@ -10,7 +10,7 @@ export function MandelbrotCanvas() {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const { viewState, isComputing, zoomAt, pan, reset, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
+  const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
   });
 
@@ -99,13 +99,14 @@ export function MandelbrotCanvas() {
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const zoomIn = e.deltaY < 0;
-      zoomAt(e.clientX, e.clientY, zoomIn);
+      // Use instant zoom with continuous factor based on scroll amount
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      zoomAtInstant(e.clientX, e.clientY, zoomFactor);
     };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [zoomAt]);
+  }, [zoomAtInstant]);
 
   return (
     <>
