@@ -264,7 +264,6 @@ export function MandelbrotCanvas() {
 
     // Touch handling
     let touchStartDist = 0;
-    let touchStartZoom = 1;
     let lastTouchX = 0;
     let lastTouchY = 0;
     let isTouchDragging = false;
@@ -300,7 +299,6 @@ export function MandelbrotCanvas() {
       } else if (e.touches.length === 2) {
         e.preventDefault();
         touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
-        touchStartZoom = viewState.zoom;
         startDrag();
       }
     };
@@ -322,13 +320,13 @@ export function MandelbrotCanvas() {
           lastTouchX = touch.clientX;
           lastTouchY = touch.clientY;
         }
-      } else if (e.touches.length === 2) {
+      } else if (e.touches.length === 2 && touchStartDist > 0) {
         e.preventDefault();
         const dist = getTouchDistance(e.touches[0], e.touches[1]);
         const center = getTouchCenter(e.touches[0], e.touches[1]);
-        const scale = dist / touchStartDist;
-        const newZoom = touchStartZoom * scale;
-        const zoomFactor = newZoom / viewState.zoom;
+        // Calculate zoom factor relative to previous distance, not start
+        const zoomFactor = dist / touchStartDist;
+        touchStartDist = dist; // Update for next move event
         zoomAtInstant(center.x, center.y, zoomFactor);
       }
     };
@@ -360,7 +358,7 @@ export function MandelbrotCanvas() {
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [zoomAtInstant, zoomAt, pan, startDrag, stopDrag, viewState.zoom]);
+  }, [zoomAtInstant, zoomAt, pan, startDrag, stopDrag]);
 
   return (
     <>
