@@ -344,20 +344,25 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
           
           {showLocations && (
             <div className="theme-list">
-              {interestingLocations.map(loc => (
-                <button
-                  key={loc.id}
-                  className="theme-item"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNavigateTo(loc.x, loc.y, loc.zoom);
-                    setShowLocations(false);
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="theme-name">{loc.name}</span>
-                </button>
-              ))}
+              {interestingLocations
+                .filter(loc => loc.set === fractalSet.type)
+                .map(loc => (
+                  <button
+                    key={loc.id}
+                    className="theme-item"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateTo(loc.x, loc.y, loc.zoom);
+                      setShowLocations(false);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="theme-name">{loc.name}</span>
+                  </button>
+                ))}
+              {interestingLocations.filter(loc => loc.set === fractalSet.type).length === 0 && (
+                <div className="theme-empty">No preset locations</div>
+              )}
             </div>
           )}
           

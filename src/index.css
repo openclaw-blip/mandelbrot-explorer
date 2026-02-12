@@ -256,6 +256,13 @@ body {
   letter-spacing: 0.5px;
 }
 
+.theme-empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
 .theme-item {
   width: 100%;
   display: flex;
