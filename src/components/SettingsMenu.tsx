@@ -12,6 +12,8 @@ interface SettingsMenuProps {
   onThemeChange: (theme: ColorTheme) => void;
   colorScale: 'log' | 'linear';
   onScaleChange: (scale: 'log' | 'linear') => void;
+  showOrbit: boolean;
+  onOrbitToggle: (show: boolean) => void;
   fractalSet: FractalSet;
   onFractalSetChange: (set: FractalSet) => void;
   juliaPresets: JuliaPreset[];
@@ -78,7 +80,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, fractalSet, onFractalSetChange, juliaPresets, multibrotPresets, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
+export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, showOrbit, onOrbitToggle, fractalSet, onFractalSetChange, juliaPresets, multibrotPresets, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
@@ -411,6 +413,17 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
           >
             <span className="settings-icon">📊</span>
             <span className="settings-label">Scale: {colorScale === 'log' ? 'Log' : 'Linear'}</span>
+          </button>
+          
+          <button 
+            className="settings-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOrbitToggle(!showOrbit);
+            }}
+          >
+            <span className="settings-icon">🌀</span>
+            <span className="settings-label">Orbit: {showOrbit ? 'On' : 'Off'}</span>
           </button>
           
           <div className="settings-divider" />

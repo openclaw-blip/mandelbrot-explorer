@@ -17,13 +17,13 @@ function getThemeFromUrl(): ColorTheme {
   return themeId ? getThemeById(themeId) : defaultTheme;
 }
 
-// Read scale from URL hash (defaults to log)
+// Read scale from URL hash (defaults to linear)
 function getScaleFromUrl(): 'log' | 'linear' {
   const hash = window.location.hash.slice(1);
-  if (!hash) return 'log';
+  if (!hash) return 'linear';
   const params = new URLSearchParams(hash);
   const scale = params.get('scale');
-  return scale === 'lin' ? 'linear' : 'log';
+  return scale === 'log' ? 'log' : 'linear';
 }
 
 // Update theme in URL hash (preserving other params)
@@ -43,10 +43,31 @@ function updateThemeInUrl(themeId: string) {
 function updateScaleInUrl(scale: 'log' | 'linear') {
   const hash = window.location.hash.slice(1);
   const params = new URLSearchParams(hash);
-  if (scale === 'log') {
+  if (scale === 'linear') {
     params.delete('scale');
   } else {
-    params.set('scale', 'lin');
+    params.set('scale', 'log');
+  }
+  const newHash = params.toString();
+  window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
+}
+
+// Read orbit toggle from URL hash (defaults to off)
+function getOrbitFromUrl(): boolean {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return false;
+  const params = new URLSearchParams(hash);
+  return params.get('orbit') === '1';
+}
+
+// Update orbit in URL hash
+function updateOrbitInUrl(show: boolean) {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  if (show) {
+    params.set('orbit', '1');
+  } else {
+    params.delete('orbit');
   }
   const newHash = params.toString();
   window.history.replaceState(null, '', newHash ? `#${newHash}` : window.location.pathname);
@@ -86,6 +107,7 @@ export function MandelbrotCanvas() {
   const [colorOffset, setColorOffset] = useState(0);
   const [colorScale, setColorScale] = useState<'log' | 'linear'>(() => getScaleFromUrl());
   const [fractalSet, setFractalSet] = useState<FractalSet>(() => getFractalSetFromUrl());
+  const [showOrbit, setShowOrbit] = useState(() => getOrbitFromUrl());
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   
   // Apply color offset to rotate palette
@@ -109,6 +131,12 @@ export function MandelbrotCanvas() {
   const handleScaleChange = useCallback((newScale: 'log' | 'linear') => {
     setColorScale(newScale);
     updateScaleInUrl(newScale);
+  }, []);
+
+  // Update URL when orbit toggle changes
+  const handleOrbitToggle = useCallback((show: boolean) => {
+    setShowOrbit(show);
+    updateOrbitInUrl(show);
   }, []);
 
   // Screenshot export
@@ -373,13 +401,15 @@ export function MandelbrotCanvas() {
         onContextMenu={handleContextMenu}
       >
         <canvas ref={canvasRef} className="mandelbrot-canvas" />
-        <OrbitOverlay
-          centerX={viewState.centerX}
-          centerY={viewState.centerY}
-          zoom={viewState.zoom}
-          fractalSet={fractalSet}
-          containerRef={containerRef}
-        />
+        {showOrbit && (
+          <OrbitOverlay
+            centerX={viewState.centerX}
+            centerY={viewState.centerY}
+            zoom={viewState.zoom}
+            fractalSet={fractalSet}
+            containerRef={containerRef}
+          />
+        )}
       </div>
       <Minimap
         centerX={viewState.centerX}
@@ -400,6 +430,8 @@ export function MandelbrotCanvas() {
         onThemeChange={handleThemeChange}
         colorScale={colorScale}
         onScaleChange={handleScaleChange}
+        showOrbit={showOrbit}
+        onOrbitToggle={handleOrbitToggle}
         fractalSet={fractalSet}
         onFractalSetChange={handleFractalSetChange}
         juliaPresets={juliaPresets}
