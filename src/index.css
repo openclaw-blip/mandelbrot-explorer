@@ -155,8 +155,8 @@ body {
 
 .share-button {
   position: absolute;
-  bottom: 20px;
-  right: 160px;
+  top: 20px;
+  left: 20px;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(0, 255, 255, 0.3);
@@ -170,13 +170,12 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  opacity: 0.6;
   transition: opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .share-button:hover {
-  opacity: 1;
   border-color: rgba(0, 255, 255, 0.6);
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
 }
 
 .share-button.success {
