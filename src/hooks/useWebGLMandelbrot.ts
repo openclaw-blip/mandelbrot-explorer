@@ -555,17 +555,16 @@ export function useWebGLMandelbrot(
     const x = screenX - rect.left;
     const y = screenY - rect.top;
     
-    const width = canvas.width;
-    const height = canvas.height;
-    const aspectRatio = width / height;
+    // Use CSS dimensions for coordinate conversion
+    const aspectRatio = rect.width / rect.height;
     
     const current = currentViewRef.current;
     const viewWidth = 4 / current.zoom;
     const viewHeight = viewWidth / aspectRatio;
     
-    const dpr = window.devicePixelRatio || 1;
-    const realPart = current.centerX + (x * dpr / width - 0.5) * viewWidth;
-    const imagPart = current.centerY + (0.5 - y * dpr / height) * viewHeight;
+    // x/rect.width gives ratio 0-1 since both are CSS pixels
+    const realPart = current.centerX + (x / rect.width - 0.5) * viewWidth;
+    const imagPart = current.centerY + (0.5 - y / rect.height) * viewHeight;
     
     const zoomFactor = zoomIn ? 2 : 0.5;
     const newZoom = current.zoom * zoomFactor;
@@ -581,15 +580,17 @@ export function useWebGLMandelbrot(
     const canvas = canvasRef.current;
     if (!canvas) return;
     
+    const rect = canvas.getBoundingClientRect();
+    const aspectRatio = rect.width / rect.height;
+    
     const current = currentViewRef.current;
-    const aspectRatio = canvas.width / canvas.height;
     const viewWidth = 4 / current.zoom;
     const viewHeight = viewWidth / aspectRatio;
     
-    const dpr = window.devicePixelRatio || 1;
+    // deltaX/Y are in CSS pixels, use rect dimensions
     const newView: ViewState = {
-      centerX: current.centerX - (deltaX * dpr / canvas.width) * viewWidth,
-      centerY: current.centerY + (deltaY * dpr / canvas.height) * viewHeight,
+      centerX: current.centerX - (deltaX / rect.width) * viewWidth,
+      centerY: current.centerY + (deltaY / rect.height) * viewHeight,
       zoom: current.zoom,
     };
     
