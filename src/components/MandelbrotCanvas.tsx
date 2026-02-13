@@ -305,7 +305,7 @@ export function MandelbrotCanvas() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       // Use instant zoom with continuous factor based on scroll amount
-      const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const zoomFactor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
       zoomAtInstant(e.clientX, e.clientY, zoomFactor);
     };
 
