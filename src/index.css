@@ -430,3 +430,276 @@ body {
 .theme-list::-webkit-scrollbar-thumb:hover {
   background: var(--ui-color-dim);
 }
+
+/* Video Export Modal */
+.video-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.video-modal {
+  background: var(--ui-bg-solid);
+  border: 1px solid var(--ui-border);
+  width: 400px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.video-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.video-modal-header h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ui-color);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.video-modal-content {
+  padding: 16px 20px;
+}
+
+.video-section {
+  margin-bottom: 16px;
+}
+
+.video-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 10px;
+  color: var(--ui-color);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.video-use-current {
+  background: transparent;
+  border: 1px solid var(--ui-border);
+  padding: 4px 8px;
+  font-family: var(--ui-font);
+  font-size: 9px;
+  color: var(--ui-color-dim);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.video-use-current:hover {
+  background: var(--ui-color-faint);
+  border-color: var(--ui-color);
+  color: var(--ui-color);
+}
+
+.video-coords {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--ui-color-dim);
+  font-family: var(--ui-font);
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--ui-border);
+}
+
+.video-divider {
+  height: 1px;
+  background: var(--ui-border);
+  margin: 16px 0;
+}
+
+.video-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.video-label {
+  font-size: 10px;
+  color: var(--ui-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.video-options {
+  display: flex;
+  gap: 4px;
+}
+
+.video-option {
+  background: transparent;
+  border: 1px solid var(--ui-border);
+  padding: 6px 10px;
+  font-family: var(--ui-font);
+  font-size: 10px;
+  color: var(--ui-color-dim);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.video-option:hover {
+  background: var(--ui-color-faint);
+  border-color: var(--ui-color);
+}
+
+.video-option.active {
+  background: var(--ui-color-faint);
+  border-color: var(--ui-color);
+  color: var(--ui-color);
+}
+
+.video-summary {
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--ui-border);
+}
+
+.video-summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--ui-color-dim);
+  margin-bottom: 4px;
+}
+
+.video-summary-row:last-child {
+  margin-bottom: 0;
+}
+
+.video-modal-footer {
+  display: flex;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.video-cancel,
+.video-export {
+  flex: 1;
+  padding: 10px;
+  font-family: var(--ui-font);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.video-cancel {
+  background: transparent;
+  border: 1px solid var(--ui-border);
+  color: var(--ui-color-dim);
+}
+
+.video-cancel:hover {
+  background: var(--ui-color-faint);
+  border-color: var(--ui-color);
+  color: var(--ui-color);
+}
+
+.video-export {
+  background: var(--ui-color-faint);
+  border: 1px solid var(--ui-color);
+  color: var(--ui-color);
+}
+
+.video-export:hover {
+  background: var(--ui-color);
+  color: #000;
+}
+
+/* Video Recorder */
+.video-recorder-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.video-recorder {
+  position: relative;
+  max-width: 90vw;
+  max-height: 80vh;
+}
+
+.video-recorder-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  border: 1px solid var(--ui-border);
+}
+
+.video-recorder-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.9));
+}
+
+.video-recorder-status {
+  font-family: var(--ui-font);
+  font-size: 12px;
+  color: var(--ui-color);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.video-recorder-progress {
+  height: 4px;
+  background: var(--ui-color-faint);
+  margin-bottom: 12px;
+}
+
+.video-recorder-progress-bar {
+  height: 100%;
+  background: var(--ui-color);
+  transition: width 0.1s linear;
+}
+
+.video-recorder-cancel {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid var(--ui-border);
+  font-family: var(--ui-font);
+  font-size: 11px;
+  color: var(--ui-color-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.video-recorder-cancel:hover {
+  background: var(--ui-color-faint);
+  border-color: var(--ui-color);
+  color: var(--ui-color);
+}

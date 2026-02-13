@@ -5,6 +5,8 @@ import { LoadingIndicator } from './LoadingIndicator';
 import { SettingsMenu } from './SettingsMenu';
 import { Minimap } from './Minimap';
 import { OrbitOverlay } from './OrbitOverlay';
+import { VideoExportModal, VideoExportConfig } from './VideoExportModal';
+import { VideoRecorder } from './VideoRecorder';
 import { ColorTheme, colorThemes, defaultTheme, getThemeById } from '../colorThemes';
 import { juliaPresets, multibrotPresets, fractalSetFromUrlParams, fractalSetToUrlParams } from '../juliaSets';
 
@@ -108,6 +110,8 @@ export function MandelbrotCanvas() {
   const [colorScale, setColorScale] = useState<'log' | 'linear'>(() => getScaleFromUrl());
   const [fractalSet, setFractalSet] = useState<FractalSet>(() => getFractalSetFromUrl());
   const [showOrbit, setShowOrbit] = useState(() => getOrbitFromUrl());
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [videoConfig, setVideoConfig] = useState<VideoExportConfig | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   
   // Apply color offset to rotate palette
@@ -137,6 +141,20 @@ export function MandelbrotCanvas() {
   const handleOrbitToggle = useCallback((show: boolean) => {
     setShowOrbit(show);
     updateOrbitInUrl(show);
+  }, []);
+
+  // Video export handlers
+  const handleOpenVideoExport = useCallback(() => {
+    setShowVideoModal(true);
+  }, []);
+
+  const handleStartVideoExport = useCallback((config: VideoExportConfig) => {
+    setShowVideoModal(false);
+    setVideoConfig(config);
+  }, []);
+
+  const handleVideoComplete = useCallback(() => {
+    setVideoConfig(null);
   }, []);
 
   // Screenshot export
@@ -437,11 +455,33 @@ export function MandelbrotCanvas() {
         juliaPresets={juliaPresets}
         multibrotPresets={multibrotPresets}
         onScreenshot={handleScreenshot}
+        onVideoExport={handleOpenVideoExport}
         onReset={reset}
         onFullscreen={toggleFullscreen}
         onNavigateTo={navigateTo}
       />
       <LoadingIndicator visible={isComputing} />
+      
+      {showVideoModal && (
+        <VideoExportModal
+          currentX={viewState.centerX}
+          currentY={viewState.centerY}
+          currentZoom={viewState.zoom}
+          onClose={() => setShowVideoModal(false)}
+          onExport={handleStartVideoExport}
+        />
+      )}
+      
+      {videoConfig && (
+        <VideoRecorder
+          config={videoConfig}
+          theme={rotatedTheme}
+          fractalSet={fractalSet}
+          colorScale={colorScale}
+          onComplete={handleVideoComplete}
+          onCancel={handleVideoComplete}
+        />
+      )}
     </>
   );
 }

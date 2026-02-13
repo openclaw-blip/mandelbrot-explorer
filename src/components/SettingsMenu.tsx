@@ -19,6 +19,7 @@ interface SettingsMenuProps {
   juliaPresets: JuliaPreset[];
   multibrotPresets: MultibrotPreset[];
   onScreenshot: () => void;
+  onVideoExport: () => void;
   onReset: () => void;
   onFullscreen: () => void;
   onNavigateTo: (x: number, y: number, zoom: number) => void;
@@ -80,7 +81,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, showOrbit, onOrbitToggle, fractalSet, onFractalSetChange, juliaPresets, multibrotPresets, onScreenshot, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
+export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, onScaleChange, showOrbit, onOrbitToggle, fractalSet, onFractalSetChange, juliaPresets, multibrotPresets, onScreenshot, onVideoExport, onReset, onFullscreen, onNavigateTo }: SettingsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
@@ -202,6 +203,17 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
             }}
           >
             <span className="settings-label">Export Image</span>
+          </button>
+          
+          <button 
+            className="settings-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onVideoExport();
+              setIsOpen(false);
+            }}
+          >
+            <span className="settings-label">Export Video</span>
           </button>
           
           <button 
