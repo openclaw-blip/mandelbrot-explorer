@@ -1,12 +1,12 @@
 /* Alien-style sci-fi theme */
 :root {
-  --ui-color: #ff9500;
-  --ui-color-dim: rgba(255, 149, 0, 0.6);
-  --ui-color-faint: rgba(255, 149, 0, 0.25);
-  --ui-color-glow: rgba(255, 149, 0, 0.4);
+  --ui-color: #00d4ff;
+  --ui-color-dim: rgba(0, 212, 255, 0.6);
+  --ui-color-faint: rgba(0, 212, 255, 0.2);
+  --ui-color-glow: rgba(0, 212, 255, 0.4);
   --ui-bg: rgba(0, 0, 0, 0.9);
   --ui-bg-solid: #0a0a0a;
-  --ui-border: rgba(255, 149, 0, 0.4);
+  --ui-border: rgba(0, 212, 255, 0.4);
   --ui-font: 'SF Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
 }
 
@@ -57,8 +57,7 @@ body {
   bottom: 12px;
   left: 12px;
   display: flex;
-  gap: 2px;
-  flex-direction: column;
+  gap: 16px;
   background: var(--ui-bg);
   border: 1px solid var(--ui-border);
   padding: 8px 12px;
@@ -73,12 +72,11 @@ body {
 
 .info-item {
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .info-label {
   color: var(--ui-color-dim);
-  min-width: 12px;
 }
 
 @media (max-width: 600px) {
@@ -87,6 +85,7 @@ body {
     left: 8px;
     padding: 6px 8px;
     font-size: 9px;
+    gap: 10px;
   }
 }
 
