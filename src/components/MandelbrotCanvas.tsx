@@ -175,7 +175,7 @@ export function MandelbrotCanvas() {
     }, 'image/png');
   }, []);
 
-  const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, navigateTo, handleResize, startDrag, stopDrag } = useWebGLMandelbrot(canvasRef, {
+  const { viewState, isComputing, zoomAt, zoomAtInstant, pan, reset, setCenter, navigateTo, handleResize, startDrag, stopDrag, renderAt } = useWebGLMandelbrot(canvasRef, {
     maxIterations: 1000,
     theme: rotatedTheme,
     colorScale,
@@ -475,9 +475,8 @@ export function MandelbrotCanvas() {
       {videoConfig && (
         <VideoRecorder
           config={videoConfig}
-          theme={rotatedTheme}
-          fractalSet={fractalSet}
-          colorScale={colorScale}
+          canvasRef={canvasRef}
+          onRenderFrame={renderAt}
           onComplete={handleVideoComplete}
           onCancel={handleVideoComplete}
         />

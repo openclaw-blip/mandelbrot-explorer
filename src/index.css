@@ -703,3 +703,22 @@ body {
   border-color: var(--ui-color);
   color: var(--ui-color);
 }
+
+.video-recorder-preview {
+  border: 1px solid var(--ui-border);
+  background: #000;
+  margin-bottom: 16px;
+}
+
+.video-recorder-info {
+  text-align: center;
+}
+
+.video-recorder-details {
+  font-family: var(--ui-font);
+  font-size: 10px;
+  color: var(--ui-color-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}

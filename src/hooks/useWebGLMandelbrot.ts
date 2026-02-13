@@ -801,6 +801,11 @@ export function useWebGLMandelbrot(
     updateUrl(newView);
   }, [render]);
 
+  // Render at specific position without updating state (for video export)
+  const renderAt = useCallback((centerX: number, centerY: number, zoom: number) => {
+    render({ centerX, centerY, zoom });
+  }, [render]);
+
   return {
     viewState,
     isComputing: false,
@@ -814,5 +819,6 @@ export function useWebGLMandelbrot(
     startDrag,
     stopDrag,
     render: () => render(currentViewRef.current),
+    renderAt,
   };
 }
