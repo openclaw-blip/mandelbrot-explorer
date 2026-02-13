@@ -254,7 +254,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                 }}
               >
                 <span className="theme-name">Mandelbrot</span>
-                {fractalSet.type === 'mandelbrot' && <span className="theme-check">{'>'}</span>}
+                {fractalSet.type === 'mandelbrot' && <span className="theme-check">•</span>}
               </button>
               <button
                 className={`theme-item ${fractalSet.type === 'burning-ship' ? 'active' : ''}`}
@@ -266,7 +266,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                 }}
               >
                 <span className="theme-name">Burning Ship</span>
-                {fractalSet.type === 'burning-ship' && <span className="theme-check">{'>'}</span>}
+                {fractalSet.type === 'burning-ship' && <span className="theme-check">•</span>}
               </button>
               <button
                 className={`theme-item ${fractalSet.type === 'tricorn' ? 'active' : ''}`}
@@ -278,7 +278,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                 }}
               >
                 <span className="theme-name">Tricorn</span>
-                {fractalSet.type === 'tricorn' && <span className="theme-check">{'>'}</span>}
+                {fractalSet.type === 'tricorn' && <span className="theme-check">•</span>}
               </button>
               <div className="theme-divider" />
               <div className="theme-section-label">Multibrot (z^n + c)</div>
@@ -296,7 +296,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                     }}
                   >
                     <span className="theme-name">{preset.name}</span>
-                    {isActive && <span className="theme-check">{'>'}</span>}
+                    {isActive && <span className="theme-check">•</span>}
                   </button>
                 );
               })}
@@ -317,7 +317,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                     }}
                   >
                     <span className="theme-name">{preset.name}</span>
-                    {isActive && <span className="theme-check">{'>'}</span>}
+                    {isActive && <span className="theme-check">•</span>}
                   </button>
                 );
               })}
@@ -394,7 +394,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                     style={{ background: getThemePreview(theme) }}
                   />
                   <span className="theme-name">{theme.name}</span>
-                  {theme.id === currentTheme.id && <span className="theme-check">{'>'}</span>}
+                  {theme.id === currentTheme.id && <span className="theme-check">•</span>}
                 </button>
               ))}
             </div>
