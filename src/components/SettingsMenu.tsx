@@ -228,6 +228,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
           
           <div className="settings-divider" />
           
+          <div className="submenu-container">
           <button 
             className={`settings-item ${showSets ? 'active' : ''}`}
             onClick={(e) => {
@@ -322,7 +323,9 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               })}
             </div>
           )}
+          </div>
           
+          <div className="submenu-container">
           <button 
             className={`settings-item ${showLocations ? 'active' : ''}`}
             onClick={(e) => {
@@ -359,7 +362,9 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               )}
             </div>
           )}
+          </div>
           
+          <div className="submenu-container">
           <button 
             className={`settings-item ${showThemes ? 'active' : ''}`}
             onClick={(e) => {
@@ -394,6 +399,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               ))}
             </div>
           )}
+          </div>
           
           <button 
             className="settings-item"

@@ -200,6 +200,10 @@ body {
   min-width: 160px;
 }
 
+.submenu-container {
+  position: relative;
+}
+
 .settings-item {
   width: 100%;
   display: flex;
@@ -255,10 +259,17 @@ body {
   margin: 4px 0;
 }
 
-/* Theme/Option Lists */
+/* Theme/Option Lists - Flyout Submenus */
 .theme-list {
-  padding: 2px 0 0 0;
-  max-height: 300px;
+  position: absolute;
+  right: 100%;
+  top: 0;
+  margin-right: 4px;
+  background: var(--ui-bg-solid);
+  border: 1px solid var(--ui-border);
+  padding: 4px;
+  min-width: 140px;
+  max-height: 400px;
   overflow-y: auto;
 }
 
