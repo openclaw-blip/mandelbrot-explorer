@@ -23,9 +23,9 @@ export function InfoOverlay({ centerX, centerY, zoom }: InfoOverlayProps) {
 
   return (
     <div className="info-overlay">
-      <span className="info-item"><span className="info-label">r</span>{formatNumber(centerX)}</span>
-      <span className="info-item"><span className="info-label">i</span>{sign}{formatNumber(centerY)}</span>
-      <span className="info-item"><span className="info-label">z</span>{formatZoom(zoom)}</span>
+      <span className="info-item"><span className="info-label">RE:</span>{formatNumber(centerX)}</span>
+      <span className="info-item"><span className="info-label">IM:</span>{sign}{formatNumber(centerY)}</span>
+      <span className="info-item"><span className="info-label">MAG:</span>{formatZoom(zoom)}</span>
     </div>
   );
 }

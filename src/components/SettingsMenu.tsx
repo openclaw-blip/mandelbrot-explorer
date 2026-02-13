@@ -172,7 +172,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
         onMouseUp={(e) => e.stopPropagation()}
         aria-label="Settings"
       >
-        ⚙
+        ≡
       </button>
       
       {isOpen && (
@@ -188,11 +188,8 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               handleCopyLink();
             }}
           >
-            <span className="settings-icon">
-              {copyState === 'success' ? '✓' : copyState === 'error' ? '✗' : '🔗'}
-            </span>
             <span className="settings-label">
-              {copyState === 'success' ? 'Copied!' : copyState === 'error' ? 'Failed' : 'Copy link'}
+              {copyState === 'success' ? '> Copied' : copyState === 'error' ? '> Failed' : 'Copy Link'}
             </span>
           </button>
           
@@ -204,8 +201,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               setIsOpen(false);
             }}
           >
-            <span className="settings-icon">📷</span>
-            <span className="settings-label">Save image</span>
+            <span className="settings-label">Export Image</span>
           </button>
           
           <button 
@@ -216,7 +212,6 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               setIsOpen(false);
             }}
           >
-            <span className="settings-icon">⛶</span>
             <span className="settings-label">Fullscreen</span>
           </button>
           
@@ -228,8 +223,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               setIsOpen(false);
             }}
           >
-            <span className="settings-icon">↺</span>
-            <span className="settings-label">Reset view</span>
+            <span className="settings-label">Reset View</span>
           </button>
           
           <div className="settings-divider" />
@@ -243,9 +237,8 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               setShowThemes(false);
             }}
           >
-            <span className="settings-icon">🔮</span>
-            <span className="settings-label">Sets</span>
-            <span className="settings-arrow">{showSets ? '▼' : '▶'}</span>
+            <span className="settings-label">Fractal Set</span>
+            <span className="settings-arrow">{showSets ? '−' : '+'}</span>
           </button>
           
           {showSets && (
@@ -260,7 +253,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                 }}
               >
                 <span className="theme-name">Mandelbrot</span>
-                {fractalSet.type === 'mandelbrot' && <span className="theme-check">✓</span>}
+                {fractalSet.type === 'mandelbrot' && <span className="theme-check">{'>'}</span>}
               </button>
               <button
                 className={`theme-item ${fractalSet.type === 'burning-ship' ? 'active' : ''}`}
@@ -272,7 +265,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                 }}
               >
                 <span className="theme-name">Burning Ship</span>
-                {fractalSet.type === 'burning-ship' && <span className="theme-check">✓</span>}
+                {fractalSet.type === 'burning-ship' && <span className="theme-check">{'>'}</span>}
               </button>
               <button
                 className={`theme-item ${fractalSet.type === 'tricorn' ? 'active' : ''}`}
@@ -284,7 +277,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                 }}
               >
                 <span className="theme-name">Tricorn</span>
-                {fractalSet.type === 'tricorn' && <span className="theme-check">✓</span>}
+                {fractalSet.type === 'tricorn' && <span className="theme-check">{'>'}</span>}
               </button>
               <div className="theme-divider" />
               <div className="theme-section-label">Multibrot (z^n + c)</div>
@@ -302,7 +295,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                     }}
                   >
                     <span className="theme-name">{preset.name}</span>
-                    {isActive && <span className="theme-check">✓</span>}
+                    {isActive && <span className="theme-check">{'>'}</span>}
                   </button>
                 );
               })}
@@ -323,7 +316,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                     }}
                   >
                     <span className="theme-name">{preset.name}</span>
-                    {isActive && <span className="theme-check">✓</span>}
+                    {isActive && <span className="theme-check">{'>'}</span>}
                   </button>
                 );
               })}
@@ -339,9 +332,8 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               setShowThemes(false);
             }}
           >
-            <span className="settings-icon">📍</span>
             <span className="settings-label">Locations</span>
-            <span className="settings-arrow">{showLocations ? '▼' : '▶'}</span>
+            <span className="settings-arrow">{showLocations ? '−' : '+'}</span>
           </button>
           
           {showLocations && (
@@ -377,9 +369,8 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               setShowSets(false);
             }}
           >
-            <span className="settings-icon">🎨</span>
-            <span className="settings-label">Colors</span>
-            <span className="settings-arrow">{showThemes ? '▼' : '▶'}</span>
+            <span className="settings-label">Palette</span>
+            <span className="settings-arrow">{showThemes ? '−' : '+'}</span>
           </button>
           
           {showThemes && (
@@ -398,7 +389,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
                     style={{ background: getThemePreview(theme) }}
                   />
                   <span className="theme-name">{theme.name}</span>
-                  {theme.id === currentTheme.id && <span className="theme-check">✓</span>}
+                  {theme.id === currentTheme.id && <span className="theme-check">{'>'}</span>}
                 </button>
               ))}
             </div>
@@ -411,8 +402,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               onScaleChange(colorScale === 'log' ? 'linear' : 'log');
             }}
           >
-            <span className="settings-icon">📊</span>
-            <span className="settings-label">Scale: {colorScale === 'log' ? 'Log' : 'Linear'}</span>
+            <span className="settings-label">Scale [{colorScale === 'log' ? 'LOG' : 'LIN'}]</span>
           </button>
           
           <button 
@@ -422,8 +412,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               onOrbitToggle(!showOrbit);
             }}
           >
-            <span className="settings-icon">🌀</span>
-            <span className="settings-label">Orbit: {showOrbit ? 'On' : 'Off'}</span>
+            <span className="settings-label">Orbit [{showOrbit ? 'ON' : 'OFF'}]</span>
           </button>
           
           <div className="settings-divider" />
@@ -436,8 +425,7 @@ export function SettingsMenu({ themes, currentTheme, onThemeChange, colorScale, 
               setIsOpen(false);
             }}
           >
-            <span className="settings-icon">❓</span>
-            <span className="settings-label">Help</span>
+            <span className="settings-label">Controls</span>
           </button>
         </div>
       )}
