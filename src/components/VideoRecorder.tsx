@@ -121,7 +121,7 @@ export function VideoRecorder({ config, canvasRef, onRenderFrame, onComplete, on
       }
       lastFrameTime = timestamp;
 
-      const t = frame / totalFrames;
+      const t = totalFrames > 1 ? frame / (totalFrames - 1) : 0;
       
       // Interpolate position (linear for x/y, exponential for zoom)
       const currentX = config.startX + (config.endX - config.startX) * t;
@@ -140,7 +140,7 @@ export function VideoRecorder({ config, canvasRef, onRenderFrame, onComplete, on
       setProgress((frame / totalFrames) * 100);
       frame++;
 
-      if (frame <= totalFrames) {
+      if (frame < totalFrames) {
         requestAnimationFrame(renderFrame);
       } else {
         mediaRecorder.stop();
