@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ColorTheme, defaultTheme } from '../colorThemes';
+import { 
+  DoublePair, 
+  fromNumber, 
+  toNumber, 
+  subtractNumber,
+  addNumber,
+  needsExtendedPrecision 
+} from '../utils/extendedPrecision';
 
 interface ViewState {
   centerX: number;
@@ -413,6 +421,10 @@ export function useWebGLMandelbrot(
   const urlUpdateTimeoutRef = useRef<number>();
   const isAnimatingRef = useRef<boolean>(false);
   const isDraggingRef = useRef<boolean>(false);
+  
+  // Extended precision center coordinates for deep zoom panning
+  const extCenterXRef = useRef<DoublePair>(fromNumber(initialView.centerX));
+  const extCenterYRef = useRef<DoublePair>(fromNumber(initialView.centerY));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -642,8 +654,10 @@ export function useWebGLMandelbrot(
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        // Animation complete
+        // Animation complete - sync extended precision refs
         isAnimatingRef.current = false;
+        extCenterXRef.current = fromNumber(currentView.centerX);
+        extCenterYRef.current = fromNumber(currentView.centerY);
         updateUrl(currentView);
       }
     };
@@ -682,6 +696,9 @@ export function useWebGLMandelbrot(
     
     const newView = { centerX: newCenterX, centerY: newCenterY, zoom: newZoom };
     currentViewRef.current = newView;
+    // Sync extended precision refs
+    extCenterXRef.current = fromNumber(newCenterX);
+    extCenterYRef.current = fromNumber(newCenterY);
     setViewState(newView);
     render(newView);
     
@@ -731,10 +748,30 @@ export function useWebGLMandelbrot(
     const viewWidth = 4 / current.zoom;
     const viewHeight = viewWidth / aspectRatio;
     
-    // deltaX/Y are in CSS pixels, use rect dimensions
+    // Calculate the pan amounts
+    const panX = (deltaX / rect.width) * viewWidth;
+    const panY = (deltaY / rect.height) * viewHeight;
+    
+    let newCenterX: number;
+    let newCenterY: number;
+    
+    // Use extended precision at deep zoom levels to avoid float64 precision loss
+    if (needsExtendedPrecision(current.zoom)) {
+      extCenterXRef.current = subtractNumber(extCenterXRef.current, panX);
+      extCenterYRef.current = addNumber(extCenterYRef.current, panY);
+      newCenterX = toNumber(extCenterXRef.current);
+      newCenterY = toNumber(extCenterYRef.current);
+    } else {
+      newCenterX = current.centerX - panX;
+      newCenterY = current.centerY + panY;
+      // Keep extended precision refs in sync
+      extCenterXRef.current = fromNumber(newCenterX);
+      extCenterYRef.current = fromNumber(newCenterY);
+    }
+    
     const newView: ViewState = {
-      centerX: current.centerX - (deltaX / rect.width) * viewWidth,
-      centerY: current.centerY + (deltaY / rect.height) * viewHeight,
+      centerX: newCenterX,
+      centerY: newCenterY,
       zoom: current.zoom,
     };
     
@@ -784,6 +821,9 @@ export function useWebGLMandelbrot(
       zoom: currentViewRef.current.zoom,
     };
     currentViewRef.current = newView;
+    // Sync extended precision refs
+    extCenterXRef.current = fromNumber(newCenterX);
+    extCenterYRef.current = fromNumber(newCenterY);
     setViewState(newView);
     render(newView);
     updateUrl(newView);
@@ -796,6 +836,9 @@ export function useWebGLMandelbrot(
       zoom: newZoom,
     };
     currentViewRef.current = newView;
+    // Sync extended precision refs
+    extCenterXRef.current = fromNumber(newCenterX);
+    extCenterYRef.current = fromNumber(newCenterY);
     setViewState(newView);
     render(newView);
     updateUrl(newView);
