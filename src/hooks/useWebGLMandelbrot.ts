@@ -425,6 +425,11 @@ export function useWebGLMandelbrot(
   // Extended precision center coordinates for deep zoom panning
   const extCenterXRef = useRef<DoublePair>(fromNumber(initialView.centerX));
   const extCenterYRef = useRef<DoublePair>(fromNumber(initialView.centerY));
+  
+  // Pan offset from reference point - tracked in extended precision
+  // This is (currentCenter - refPointCenter), updated incrementally during panning
+  const panOffsetXRef = useRef<DoublePair>(fromNumber(0));
+  const panOffsetYRef = useRef<DoublePair>(fromNumber(0));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -594,14 +599,36 @@ export function useWebGLMandelbrot(
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, maxIterations, 1, 0, gl.RG, gl.FLOAT, orbit.data);
       
       lastRefPointRef.current = { centerX: view.centerX, centerY: view.centerY, refX, refY, escapeIter: refOrbitLen, zoom: view.zoom };
+      
+      // Reset pan offset when establishing new reference
+      panOffsetXRef.current = fromNumber(0);
+      panOffsetYRef.current = fromNumber(0);
     }
 
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.useProgram(program);
 
-    // Compute refOffset = refPoint - center (in float64, then pass to shader)
-    const refOffsetX = refX - view.centerX;
-    const refOffsetY = refY - view.centerY;
+    // Compute refOffset = refPoint - center
+    // At deep zoom, use the incrementally-tracked pan offset for precision
+    // refOffset = refPoint - center = refPoint - (refPointCenter + panOffset) = (refPoint - refPointCenter) - panOffset
+    // When ref was established: refPoint - refPointCenter was computed in float64
+    // panOffset is tracked incrementally in extended precision
+    let refOffsetX: number;
+    let refOffsetY: number;
+    
+    if (lastRef && needsExtendedPrecision(view.zoom)) {
+      // Use extended precision pan offset
+      // Initial offset when ref was established
+      const initialOffsetX = lastRef.refX - lastRef.centerX;
+      const initialOffsetY = lastRef.refY - lastRef.centerY;
+      // Subtract accumulated pan offset (tracked in extended precision)
+      refOffsetX = initialOffsetX - toNumber(panOffsetXRef.current);
+      refOffsetY = initialOffsetY - toNumber(panOffsetYRef.current);
+    } else {
+      // Standard computation at lower zoom
+      refOffsetX = refX - view.centerX;
+      refOffsetY = refY - view.centerY;
+    }
     
     gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
     gl.uniform2f(uniforms.center, view.centerX, view.centerY);
@@ -654,10 +681,12 @@ export function useWebGLMandelbrot(
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        // Animation complete - sync extended precision refs
+        // Animation complete - sync extended precision refs and reset pan offset
         isAnimatingRef.current = false;
         extCenterXRef.current = fromNumber(currentView.centerX);
         extCenterYRef.current = fromNumber(currentView.centerY);
+        panOffsetXRef.current = fromNumber(0);
+        panOffsetYRef.current = fromNumber(0);
         updateUrl(currentView);
       }
     };
@@ -696,9 +725,11 @@ export function useWebGLMandelbrot(
     
     const newView = { centerX: newCenterX, centerY: newCenterY, zoom: newZoom };
     currentViewRef.current = newView;
-    // Sync extended precision refs
+    // Sync extended precision refs and reset pan offset (center changed)
     extCenterXRef.current = fromNumber(newCenterX);
     extCenterYRef.current = fromNumber(newCenterY);
+    panOffsetXRef.current = fromNumber(0);
+    panOffsetYRef.current = fromNumber(0);
     setViewState(newView);
     render(newView);
     
@@ -759,6 +790,9 @@ export function useWebGLMandelbrot(
     if (needsExtendedPrecision(current.zoom)) {
       extCenterXRef.current = subtractNumber(extCenterXRef.current, panX);
       extCenterYRef.current = addNumber(extCenterYRef.current, panY);
+      // Also track pan offset from reference point (for shader precision)
+      panOffsetXRef.current = subtractNumber(panOffsetXRef.current, panX);
+      panOffsetYRef.current = addNumber(panOffsetYRef.current, panY);
       newCenterX = toNumber(extCenterXRef.current);
       newCenterY = toNumber(extCenterYRef.current);
     } else {
@@ -767,6 +801,9 @@ export function useWebGLMandelbrot(
       // Keep extended precision refs in sync
       extCenterXRef.current = fromNumber(newCenterX);
       extCenterYRef.current = fromNumber(newCenterY);
+      // Reset pan offset at low zoom (will be recomputed when needed)
+      panOffsetXRef.current = fromNumber(0);
+      panOffsetYRef.current = fromNumber(0);
     }
     
     const newView: ViewState = {
@@ -821,9 +858,11 @@ export function useWebGLMandelbrot(
       zoom: currentViewRef.current.zoom,
     };
     currentViewRef.current = newView;
-    // Sync extended precision refs
+    // Sync extended precision refs and reset pan offset
     extCenterXRef.current = fromNumber(newCenterX);
     extCenterYRef.current = fromNumber(newCenterY);
+    panOffsetXRef.current = fromNumber(0);
+    panOffsetYRef.current = fromNumber(0);
     setViewState(newView);
     render(newView);
     updateUrl(newView);
@@ -836,9 +875,11 @@ export function useWebGLMandelbrot(
       zoom: newZoom,
     };
     currentViewRef.current = newView;
-    // Sync extended precision refs
+    // Sync extended precision refs and reset pan offset
     extCenterXRef.current = fromNumber(newCenterX);
     extCenterYRef.current = fromNumber(newCenterY);
+    panOffsetXRef.current = fromNumber(0);
+    panOffsetYRef.current = fromNumber(0);
     setViewState(newView);
     render(newView);
     updateUrl(newView);
