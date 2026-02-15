@@ -327,17 +327,6 @@ export function MandelbrotCanvas() {
     let isTouchDragging = false;
     let lastTapTime = 0;
 
-    const getTouchDistance = (t1: Touch, t2: Touch) => {
-      const dx = t1.clientX - t2.clientX;
-      const dy = t1.clientY - t2.clientY;
-      return Math.sqrt(dx * dx + dy * dy);
-    };
-
-    const getTouchCenter = (t1: Touch, t2: Touch) => ({
-      x: (t1.clientX + t2.clientX) / 2,
-      y: (t1.clientY + t2.clientY) / 2,
-    });
-
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 1) {
         const touch = e.touches[0];
