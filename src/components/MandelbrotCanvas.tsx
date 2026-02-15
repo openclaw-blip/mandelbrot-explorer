@@ -305,12 +305,20 @@ export function MandelbrotCanvas() {
     // Prevent trackpad/wheel zoom (just block it, don't handle it)
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
+      e.stopPropagation();
     };
     
     // Block Safari gesture events (trackpad pinch)
     const handleGesture = (e: Event) => {
       e.preventDefault();
+      e.stopPropagation();
     };
+    
+    // Block at document level too for trackpad gestures
+    document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    document.addEventListener('gesturestart', handleGesture, { capture: true });
+    document.addEventListener('gesturechange', handleGesture, { capture: true });
+    document.addEventListener('gestureend', handleGesture, { capture: true });
 
     // Touch handling
     let touchStartDist = 0;
@@ -400,6 +408,10 @@ export function MandelbrotCanvas() {
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd);
     return () => {
+      document.removeEventListener('wheel', handleWheel, { capture: true });
+      document.removeEventListener('gesturestart', handleGesture, { capture: true });
+      document.removeEventListener('gesturechange', handleGesture, { capture: true });
+      document.removeEventListener('gestureend', handleGesture, { capture: true });
       container.removeEventListener('wheel', handleWheel);
       container.removeEventListener('gesturestart', handleGesture);
       container.removeEventListener('gesturechange', handleGesture);
