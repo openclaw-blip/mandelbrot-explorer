@@ -302,6 +302,16 @@ export function MandelbrotCanvas() {
     const container = containerRef.current;
     if (!container) return;
 
+    // Prevent trackpad/wheel zoom (just block it, don't handle it)
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    
+    // Block Safari gesture events (trackpad pinch)
+    const handleGesture = (e: Event) => {
+      e.preventDefault();
+    };
+
     // Touch handling
     let touchStartDist = 0;
     let lastTouchX = 0;
@@ -338,8 +348,7 @@ export function MandelbrotCanvas() {
         }
       } else if (e.touches.length === 2) {
         e.preventDefault();
-        touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
-        startDrag();
+        // Just block two-finger gestures, no zoom
       }
     };
 
@@ -360,14 +369,9 @@ export function MandelbrotCanvas() {
           lastTouchX = touch.clientX;
           lastTouchY = touch.clientY;
         }
-      } else if (e.touches.length === 2 && touchStartDist > 0) {
+      } else if (e.touches.length === 2) {
         e.preventDefault();
-        const dist = getTouchDistance(e.touches[0], e.touches[1]);
-        const center = getTouchCenter(e.touches[0], e.touches[1]);
-        // Calculate zoom factor relative to previous distance, not start
-        const zoomFactor = dist / touchStartDist;
-        touchStartDist = dist; // Update for next move event
-        zoomAtInstant(center.x, center.y, zoomFactor);
+        // Block two-finger zoom
       }
     };
 
@@ -388,10 +392,18 @@ export function MandelbrotCanvas() {
       }
     };
 
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('gesturestart', handleGesture);
+    container.addEventListener('gesturechange', handleGesture);
+    container.addEventListener('gestureend', handleGesture);
     container.addEventListener('touchstart', handleTouchStart, { passive: false });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd);
     return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('gesturestart', handleGesture);
+      container.removeEventListener('gesturechange', handleGesture);
+      container.removeEventListener('gestureend', handleGesture);
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
