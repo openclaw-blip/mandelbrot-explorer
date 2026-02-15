@@ -302,13 +302,6 @@ export function MandelbrotCanvas() {
     const container = containerRef.current;
     if (!container) return;
 
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      // Use instant zoom with continuous factor based on scroll amount
-      const zoomFactor = e.deltaY < 0 ? 1.015 : 1 / 1.015;
-      zoomAtInstant(e.clientX, e.clientY, zoomFactor);
-    };
-
     // Touch handling
     let touchStartDist = 0;
     let lastTouchX = 0;
@@ -395,12 +388,10 @@ export function MandelbrotCanvas() {
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
     container.addEventListener('touchstart', handleTouchStart, { passive: false });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd);
     return () => {
-      container.removeEventListener('wheel', handleWheel);
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
